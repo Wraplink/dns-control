@@ -11,6 +11,9 @@ api:
 
 agent:
   token: "CHANGE-ME"
+  lease_duration: 30s
+  offline_after: 45s
+  reconcile_interval: 5s
 
 domains:
 
