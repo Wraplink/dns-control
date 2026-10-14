@@ -1,23 +1,24 @@
 package api
 
-import "github.com/wraplink/dns-control/internal/allocation"
+import (
+	"github.com/wraplink/dns-control/internal/agentregistry"
+	"github.com/wraplink/dns-control/internal/allocation"
+)
 
 type RegisterRequest struct {
-	AgentID string `json:"agent_id"`
-
-	Capacity struct {
-		SNI   int `json:"sni"`
-		Route int `json:"route"`
-	} `json:"capacity"`
+	AgentID  string                 `json:"agent_id"`
+	Region   string                 `json:"region,omitempty"`
+	Capacity agentregistry.Capacity `json:"capacity"`
 }
 
 type RegisterResponse struct {
-	OK bool `json:"ok"`
+	OK    bool                `json:"ok"`
+	Agent agentregistry.Agent `json:"agent"`
 }
 
 type PollRequest struct {
-	AgentID string `json:"agent_id"`
-	Max     int    `json:"max"`
+	AgentID   string                 `json:"agent_id"`
+	Available agentregistry.Capacity `json:"available"`
 }
 
 type PollResponse struct {
@@ -31,7 +32,10 @@ type HeartbeatRequest struct {
 }
 
 type HeartbeatResponse struct {
-	OK bool `json:"ok"`
+	OK              bool     `json:"ok"`
+	Registered      bool     `json:"registered"`
+	Revision        uint64   `json:"revision"`
+	ReleaseLeaseIDs []string `json:"release_lease_ids,omitempty"`
 }
 
 type ReportRequest struct {
@@ -52,4 +56,8 @@ type ReportResponse struct {
 type LeasesResponse struct {
 	Revision uint64             `json:"revision"`
 	Leases   []allocation.Lease `json:"leases"`
+}
+
+type AgentsResponse struct {
+	Agents []agentregistry.Agent `json:"agents"`
 }
