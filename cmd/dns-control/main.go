@@ -34,23 +34,54 @@ func main() {
 	allocationStore := allocation.NewStore(cfg.Agent.LeaseDuration)
 	agentStore := agentregistry.NewStore()
 
-	for _, rule := range cfg.Domains {
+	for _, rule := range domainStore.List() {
 		switch rule.Mode {
 		case domain.ModeHijack:
-			allocationStore.EnsurePending(rule.Domain, allocation.TypeSNI)
+			allocationStore.EnsurePending(
+				rule.Domain,
+				allocation.TypeSNI,
+			)
+
 		case domain.ModeRoute:
-			allocationStore.EnsurePending(rule.Domain, allocation.TypeRoute)
+			allocationStore.EnsureRoutePending(
+				rule.Domain,
+				rule.Route.DestinationIP,
+				rule.Route.Protocol,
+				rule.Route.DestinationPortStart,
+				rule.Route.DestinationPortEnd,
+			)
 		}
 	}
 
 	resolver := dns.NewResolver(cfg.DNS.Upstream)
-	dnsHandler := dns.NewHandler(resolver, domainStore, allocationStore, cfg.DNS.TTL)
-	dnsServer := dns.NewServer(cfg.DNS.Listen, dnsHandler)
+	dnsHandler := dns.NewHandler(
+		resolver,
+		domainStore,
+		allocationStore,
+		cfg.DNS.TTL,
+	)
+	dnsServer := dns.NewServer(
+		cfg.DNS.Listen,
+		dnsHandler,
+	)
 
-	apiHandler := api.NewHandler(domainStore, allocationStore, agentStore, cfg.Agent.Token)
-	apiServer := api.NewServer(cfg.API.Listen, apiHandler)
+	apiHandler := api.NewHandler(
+		domainStore,
+		allocationStore,
+		agentStore,
+		cfg.Agent.Token,
+	)
+	apiServer := api.NewServer(
+		cfg.API.Listen,
+		apiHandler,
+	)
 
-	go runReconciler(allocationStore, agentStore, cfg.Agent.OfflineAfter, cfg.Agent.ReconcileInterval)
+	go runReconciler(
+		allocationStore,
+		agentStore,
+		cfg.Agent.OfflineAfter,
+		cfg.Agent.ReconcileInterval,
+	)
 
 	errCh := make(chan error, 2)
 	go func() { errCh <- dnsServer.Start() }()
@@ -72,9 +103,16 @@ func runReconciler(
 
 	reconcile := func() {
 		requeued := allocations.ReconcileExpired()
-		offline := agents.MarkOfflineBefore(time.Now().UTC().Add(-offlineAfter))
+		offline := agents.MarkOfflineBefore(
+			time.Now().UTC().Add(-offlineAfter),
+		)
+
 		if requeued > 0 || offline > 0 {
-			log.Printf("control-plane: reconciled expired_leases=%d offline_agents=%d", requeued, offline)
+			log.Printf(
+				"control-plane: reconciled expired_leases=%d offline_agents=%d",
+				requeued,
+				offline,
+			)
 		}
 	}
 
