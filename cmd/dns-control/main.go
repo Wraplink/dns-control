@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/wraplink/dns-control/internal/config"
 	"github.com/wraplink/dns-control/internal/dns"
 	"github.com/wraplink/dns-control/internal/domain"
+	"github.com/wraplink/dns-control/internal/entitlement"
 )
 
 func main() {
@@ -37,11 +39,7 @@ func main() {
 	for _, rule := range domainStore.List() {
 		switch rule.Mode {
 		case domain.ModeHijack:
-			allocationStore.EnsurePending(
-				rule.Domain,
-				allocation.TypeSNI,
-			)
-
+			allocationStore.EnsurePending(rule.Domain, allocation.TypeSNI)
 		case domain.ModeRoute:
 			allocationStore.EnsureRoutePending(
 				rule.Domain,
@@ -53,17 +51,37 @@ func main() {
 		}
 	}
 
+	var entitlementStore *entitlement.Store
+	if cfg.Backend.Enabled() {
+		entitlementStore = entitlement.NewStore(cfg.Backend.EntitlementMaxStale)
+		backendClient := entitlement.NewClient(cfg.Backend.URL, cfg.Backend.ControlKey)
+
+		refreshEntitlements(backendClient, entitlementStore)
+		go runEntitlementSync(
+			backendClient,
+			entitlementStore,
+			cfg.Backend.EntitlementRefreshInterval,
+		)
+
+		log.Printf(
+			"backend entitlement sync enabled url=%s interval=%s max_stale=%s",
+			cfg.Backend.URL,
+			cfg.Backend.EntitlementRefreshInterval,
+			cfg.Backend.EntitlementMaxStale,
+		)
+	} else {
+		log.Printf("backend entitlement sync disabled; managed DNS policies are not client-gated")
+	}
+
 	resolver := dns.NewResolver(cfg.DNS.Upstream)
 	dnsHandler := dns.NewHandler(
 		resolver,
 		domainStore,
 		allocationStore,
+		entitlementStore,
 		cfg.DNS.TTL,
 	)
-	dnsServer := dns.NewServer(
-		cfg.DNS.Listen,
-		dnsHandler,
-	)
+	dnsServer := dns.NewServer(cfg.DNS.Listen, dnsHandler)
 
 	apiHandler := api.NewHandler(
 		domainStore,
@@ -71,10 +89,7 @@ func main() {
 		agentStore,
 		cfg.Agent.Token,
 	)
-	apiServer := api.NewServer(
-		cfg.API.Listen,
-		apiHandler,
-	)
+	apiServer := api.NewServer(cfg.API.Listen, apiHandler)
 
 	go runReconciler(
 		allocationStore,
@@ -90,6 +105,40 @@ func main() {
 	if err := <-errCh; err != nil {
 		log.Fatal(err)
 	}
+}
+
+func runEntitlementSync(
+	client *entitlement.Client,
+	store *entitlement.Store,
+	interval time.Duration,
+) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		refreshEntitlements(client, store)
+	}
+}
+
+func refreshEntitlements(
+	client *entitlement.Client,
+	store *entitlement.Store,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	snapshot, err := client.Fetch(ctx)
+	if err != nil {
+		log.Printf("backend entitlement refresh failed: %v", err)
+		return
+	}
+
+	store.Replace(snapshot)
+	log.Printf(
+		"backend entitlements refreshed count=%d generated_at=%s",
+		store.Count(),
+		snapshot.GeneratedAt.Format(time.RFC3339),
+	)
 }
 
 func runReconciler(
