@@ -87,6 +87,7 @@ func main() {
 		domainStore,
 		allocationStore,
 		agentStore,
+		entitlementStore,
 		cfg.Agent.Token,
 	)
 	apiServer := api.NewServer(cfg.API.Listen, apiHandler)
