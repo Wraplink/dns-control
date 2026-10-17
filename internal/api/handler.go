@@ -8,26 +8,30 @@ import (
 	"github.com/wraplink/dns-control/internal/agentregistry"
 	"github.com/wraplink/dns-control/internal/allocation"
 	"github.com/wraplink/dns-control/internal/domain"
+	"github.com/wraplink/dns-control/internal/entitlement"
 )
 
 type Handler struct {
-	domains     *domain.Store
-	allocations *allocation.Store
-	agents      *agentregistry.Store
-	token       string
+	domains      *domain.Store
+	allocations  *allocation.Store
+	agents       *agentregistry.Store
+	entitlements *entitlement.Store
+	token        string
 }
 
 func NewHandler(
 	domains *domain.Store,
 	allocations *allocation.Store,
 	agents *agentregistry.Store,
+	entitlements *entitlement.Store,
 	token string,
 ) http.Handler {
 	h := &Handler{
-		domains:     domains,
-		allocations: allocations,
-		agents:      agents,
-		token:       token,
+		domains:      domains,
+		allocations:  allocations,
+		agents:       agents,
+		entitlements: entitlements,
+		token:        token,
 	}
 
 	mux := http.NewServeMux()
@@ -143,24 +147,45 @@ func (h *Handler) heartbeat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	entitlementRevision, grants := h.entitlementDelta(req.EntitlementRevision)
+	entitlementEnforced := h.entitlements != nil
+
 	_, registered := h.agents.Touch(req.AgentID)
 	if !registered {
 		writeJSON(w, http.StatusOK, HeartbeatResponse{
-			OK:              true,
-			Registered:      false,
-			Revision:        h.allocations.Revision(),
-			ReleaseLeaseIDs: req.LeaseIDs,
+			OK:                  true,
+			Registered:          false,
+			Revision:            h.allocations.Revision(),
+			ReleaseLeaseIDs:     req.LeaseIDs,
+			EntitlementEnforced: entitlementEnforced,
+			EntitlementRevision: entitlementRevision,
+			Entitlements:        grants,
 		})
 		return
 	}
 
 	releases := h.allocations.Heartbeat(req.AgentID, req.LeaseIDs)
 	writeJSON(w, http.StatusOK, HeartbeatResponse{
-		OK:              true,
-		Registered:      true,
-		Revision:        h.allocations.Revision(),
-		ReleaseLeaseIDs: releases,
+		OK:                  true,
+		Registered:          true,
+		Revision:            h.allocations.Revision(),
+		ReleaseLeaseIDs:     releases,
+		EntitlementEnforced: entitlementEnforced,
+		EntitlementRevision: entitlementRevision,
+		Entitlements:        grants,
 	})
+}
+
+func (h *Handler) entitlementDelta(agentRevision uint64) (uint64, []entitlement.Grant) {
+	if h.entitlements == nil {
+		return 0, nil
+	}
+
+	revision, grants := h.entitlements.AccessSnapshot()
+	if revision == agentRevision {
+		return revision, nil
+	}
+	return revision, grants
 }
 
 func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
