@@ -19,10 +19,15 @@ type Store struct {
 	leaseDuration time.Duration
 }
 
-func NewStore() *Store {
+func NewStore(leaseDuration ...time.Duration) *Store {
+	duration := 30 * time.Second
+	if len(leaseDuration) > 0 && leaseDuration[0] > 0 {
+		duration = leaseDuration[0]
+	}
+
 	return &Store{
 		leases:        make(map[string]*Lease),
-		leaseDuration: 30 * time.Second,
+		leaseDuration: duration,
 	}
 }
 
@@ -38,7 +43,6 @@ func (s *Store) List() []Lease {
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Domain < result[j].Domain
 	})
-
 	return result
 }
 
@@ -68,59 +72,52 @@ func (s *Store) EnsurePending(domain string, t Type) {
 	}
 }
 
-// Usage returns assigned + active lease counts owned by an agent.
-func (s *Store) Usage(agentID string) (sni int, route int) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	for _, lease := range s.leases {
-		if lease.AgentID != agentID || (lease.State != StateAssigned && lease.State != StateActive) {
-			continue
-		}
-		switch lease.Type {
-		case TypeSNI:
-			sni++
-		case TypeRoute:
-			route++
-		}
-	}
-	return sni, route
-}
-
-// Poll assigns pending leases without exceeding the registered per-type capacity.
-func (s *Store) Poll(agentID string, maxItems, sniSlots, routeSlots int) []Lease {
-	if maxItems <= 0 || (sniSlots <= 0 && routeSlots <= 0) {
+func (s *Store) Poll(agentID string, sniMax, routeMax int) []Lease {
+	agentID = strings.TrimSpace(agentID)
+	if agentID == "" || (sniMax <= 0 && routeMax <= 0) {
 		return nil
 	}
+	if sniMax < 0 {
+		sniMax = 0
+	}
+	if routeMax < 0 {
+		routeMax = 0
+	}
 
-	now := time.Now()
+	now := time.Now().UTC()
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Timed-out ASSIGNED leases were never activated and are safe to requeue.
-	for _, lease := range s.leases {
-		if lease.State == StateAssigned && !lease.ExpiresAt.IsZero() && now.After(lease.ExpiresAt) {
-			s.requeueLocked(lease)
-		}
-	}
+	s.reclaimExpiredLocked(now)
 
-	result := make([]Lease, 0, maxItems)
-	for _, lease := range s.leases {
+	domains := make([]string, 0, len(s.leases))
+	for name := range s.leases {
+		domains = append(domains, name)
+	}
+	sort.Strings(domains)
+
+	result := make([]Lease, 0, sniMax+routeMax)
+	sniAssigned := 0
+	routeAssigned := 0
+
+	for _, name := range domains {
+		lease := s.leases[name]
 		if lease.State != StatePending {
 			continue
 		}
 
 		switch lease.Type {
 		case TypeSNI:
-			if sniSlots <= 0 {
+			if sniAssigned >= sniMax {
 				continue
 			}
-			sniSlots--
+			sniAssigned++
 		case TypeRoute:
-			if routeSlots <= 0 {
+			if routeAssigned >= routeMax {
 				continue
 			}
-			routeSlots--
+			routeAssigned++
 		default:
 			continue
 		}
@@ -131,82 +128,145 @@ func (s *Store) Poll(agentID string, maxItems, sniSlots, routeSlots int) []Lease
 		lease.Revision = s.revision
 		lease.ExpiresAt = now.Add(s.leaseDuration)
 		result = append(result, *lease)
-
-		if len(result) >= maxItems {
-			break
-		}
 	}
 
 	return result
 }
 
-func (s *Store) Heartbeat(agentID string, leaseIDs []string) {
+func (s *Store) Heartbeat(agentID string, leaseIDs []string) []string {
+	agentID = strings.TrimSpace(agentID)
 	if agentID == "" || len(leaseIDs) == 0 {
-		return
+		return nil
 	}
 
-	wanted := make(map[string]struct{}, len(leaseIDs))
-	for _, id := range leaseIDs {
-		wanted[id] = struct{}{}
-	}
+	now := time.Now().UTC()
+	expiresAt := now.Add(s.leaseDuration)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	expiresAt := time.Now().Add(s.leaseDuration)
-	for _, lease := range s.leases {
-		if lease.AgentID != agentID {
+	release := make([]string, 0)
+	for _, id := range leaseIDs {
+		lease := s.findByIDLocked(strings.TrimSpace(id))
+		if lease == nil {
+			release = append(release, id)
 			continue
 		}
-		if _, ok := wanted[lease.ID]; ok {
-			lease.ExpiresAt = expiresAt
+
+		if lease.AgentID != agentID ||
+			(lease.State != StateAssigned && lease.State != StateActive) {
+			release = append(release, id)
+			continue
 		}
+
+		if !lease.ExpiresAt.IsZero() && !lease.ExpiresAt.After(now) {
+			s.resetToPendingLocked(lease)
+			release = append(release, id)
+			continue
+		}
+
+		lease.ExpiresAt = expiresAt
 	}
+	return release
 }
 
 func (s *Store) Activate(leaseID, agentID, address, sni, routeID string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for _, lease := range s.leases {
-		if lease.ID != leaseID {
-			continue
-		}
-		if lease.AgentID != agentID || lease.State != StateAssigned {
-			return false
-		}
-
-		s.revision++
-		lease.State = StateActive
-		lease.Address = address
-		lease.SNI = sni
-		lease.RouteID = routeID
-		lease.Revision = s.revision
-		lease.ExpiresAt = time.Now().Add(s.leaseDuration)
-		return true
+	lease := s.findByIDLocked(strings.TrimSpace(leaseID))
+	if lease == nil || lease.AgentID != strings.TrimSpace(agentID) || lease.State != StateAssigned {
+		return false
 	}
-	return false
+
+	now := time.Now().UTC()
+	if !lease.ExpiresAt.IsZero() && !lease.ExpiresAt.After(now) {
+		s.resetToPendingLocked(lease)
+		return false
+	}
+
+	s.revision++
+	lease.State = StateActive
+	lease.Address = strings.TrimSpace(address)
+	lease.SNI = strings.TrimSpace(sni)
+	lease.RouteID = strings.TrimSpace(routeID)
+	lease.Revision = s.revision
+	lease.ExpiresAt = now.Add(s.leaseDuration)
+	return true
 }
 
-// Fail returns a failed assignment to the pending pool immediately.
 func (s *Store) Fail(leaseID, agentID string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for _, lease := range s.leases {
-		if lease.ID != leaseID {
-			continue
-		}
-		if lease.AgentID != agentID || lease.State != StateAssigned {
-			return false
-		}
-		s.requeueLocked(lease)
-		return true
+	lease := s.findByIDLocked(strings.TrimSpace(leaseID))
+	if lease == nil || lease.AgentID != strings.TrimSpace(agentID) {
+		return false
 	}
-	return false
+	if lease.State != StateAssigned && lease.State != StateActive {
+		return false
+	}
+
+	s.resetToPendingLocked(lease)
+	return true
 }
 
-func (s *Store) requeueLocked(lease *Lease) {
+func (s *Store) Get(domain string) (*Lease, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	lease, ok := s.leases[normalize(domain)]
+	if !ok || lease.State != StateActive {
+		return nil, false
+	}
+	if !lease.ExpiresAt.IsZero() && !lease.ExpiresAt.After(time.Now().UTC()) {
+		return nil, false
+	}
+
+	copy := *lease
+	return &copy, true
+}
+
+func (s *Store) ReconcileExpired() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.reclaimExpiredLocked(time.Now().UTC())
+}
+
+func (s *Store) Revision() uint64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.revision
+}
+
+func (s *Store) findByIDLocked(id string) *Lease {
+	if id == "" {
+		return nil
+	}
+	for _, lease := range s.leases {
+		if lease.ID == id {
+			return lease
+		}
+	}
+	return nil
+}
+
+func (s *Store) reclaimExpiredLocked(now time.Time) int {
+	changed := 0
+	for _, lease := range s.leases {
+		if lease.State != StateAssigned && lease.State != StateActive {
+			continue
+		}
+		if lease.ExpiresAt.IsZero() || lease.ExpiresAt.After(now) {
+			continue
+		}
+		s.resetToPendingLocked(lease)
+		changed++
+	}
+	return changed
+}
+
+func (s *Store) resetToPendingLocked(lease *Lease) {
 	s.revision++
 	lease.State = StatePending
 	lease.AgentID = ""
@@ -215,22 +275,4 @@ func (s *Store) requeueLocked(lease *Lease) {
 	lease.RouteID = ""
 	lease.ExpiresAt = time.Time{}
 	lease.Revision = s.revision
-}
-
-func (s *Store) Get(domain string) (*Lease, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	lease, ok := s.leases[normalize(domain)]
-	if !ok {
-		return nil, false
-	}
-	copy := *lease
-	return &copy, true
-}
-
-func (s *Store) Revision() uint64 {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.revision
 }
