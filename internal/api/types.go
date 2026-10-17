@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/wraplink/dns-control/internal/agentregistry"
 	"github.com/wraplink/dns-control/internal/allocation"
+	"github.com/wraplink/dns-control/internal/entitlement"
 )
 
 type RegisterRequest struct {
@@ -27,15 +28,18 @@ type PollResponse struct {
 }
 
 type HeartbeatRequest struct {
-	AgentID  string   `json:"agent_id"`
-	LeaseIDs []string `json:"lease_ids"`
+	AgentID             string   `json:"agent_id"`
+	LeaseIDs            []string `json:"lease_ids"`
+	EntitlementRevision uint64   `json:"entitlement_revision"`
 }
 
 type HeartbeatResponse struct {
-	OK              bool     `json:"ok"`
-	Registered      bool     `json:"registered"`
-	Revision        uint64   `json:"revision"`
-	ReleaseLeaseIDs []string `json:"release_lease_ids,omitempty"`
+	OK                  bool                `json:"ok"`
+	Registered          bool                `json:"registered"`
+	Revision            uint64              `json:"revision"`
+	ReleaseLeaseIDs     []string            `json:"release_lease_ids,omitempty"`
+	EntitlementRevision uint64              `json:"entitlement_revision"`
+	Entitlements        []entitlement.Grant `json:"entitlements,omitempty"`
 }
 
 type ReportRequest struct {
