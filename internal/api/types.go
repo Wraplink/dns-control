@@ -6,7 +6,7 @@ import (
 )
 
 type RegisterRequest struct {
-	AgentID string `json:"agent_id"`
+	AgentID  string `json:"agent_id"`
 	Capacity struct {
 		SNI   int `json:"sni"`
 		Route int `json:"route"`
@@ -33,7 +33,9 @@ type HeartbeatRequest struct {
 	LeaseIDs []string `json:"lease_ids"`
 }
 
-type HeartbeatResponse struct { OK bool `json:"ok"` }
+type HeartbeatResponse struct {
+	OK bool `json:"ok"`
+}
 
 type ReportRequest struct {
 	AgentID string `json:"agent_id"`
@@ -44,7 +46,9 @@ type ReportRequest struct {
 	RouteID string `json:"route_id,omitempty"`
 }
 
-type ReportResponse struct { OK bool `json:"ok"` }
+type ReportResponse struct {
+	OK bool `json:"ok"`
+}
 
 type LeasesResponse struct {
 	Revision uint64             `json:"revision"`
