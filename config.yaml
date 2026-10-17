@@ -15,10 +15,18 @@ agent:
   offline_after: 45s
   reconcile_interval: 5s
 
+# Optional in development, required for paid-client DNS gating in production.
+# The key must match backend NETWORK_CONTROL_SYNC_KEY.
+backend:
+  url: ${WRAPLINK_BACKEND_URL}
+  control_key: ${NETWORK_CONTROL_SYNC_KEY}
+  entitlement_refresh_interval: 10s
+  entitlement_max_stale: 1m
+
 domains:
 
-  # SNI based hijack.
-  # Agent must allocate the SNI/edge endpoint.
+  # SNI based hijack. Entitled source IPs receive the allocated edge address;
+  # non-entitled clients resolve normally through the upstream resolvers.
   - domain: "playstation.com"
     mode: "hijack"
 
@@ -35,6 +43,5 @@ domains:
   #     destination_port_end: 31000
 
   # Normal DNS resolution.
-  # No middle server and no agent allocation.
   - domain: "google.com"
     mode: "normal"
