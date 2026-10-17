@@ -41,63 +41,113 @@ func (h *Handler) auth(next http.Handler) http.Handler {
 }
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	var req RegisterRequest
-	if json.NewDecoder(r.Body).Decode(&req) != nil { writeJSON(w, http.StatusBadRequest, map[string]any{"error":"invalid request body"}); return }
+	if json.NewDecoder(r.Body).Decode(&req) != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
 	req.AgentID = strings.TrimSpace(req.AgentID)
 	if req.AgentID == "" || req.Capacity.SNI < 0 || req.Capacity.Route < 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error":"invalid agent registration"}); return
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid agent registration"})
+		return
 	}
 	agent := h.agents.Register(req.AgentID, req.Capacity.SNI, req.Capacity.Route)
-	writeJSON(w, http.StatusOK, RegisterResponse{OK:true, Agent:agent})
+	writeJSON(w, http.StatusOK, RegisterResponse{OK: true, Agent: agent})
 }
 
 func (h *Handler) poll(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	var req PollRequest
-	if json.NewDecoder(r.Body).Decode(&req) != nil { writeJSON(w, http.StatusBadRequest, map[string]any{"error":"invalid request body"}); return }
+	if json.NewDecoder(r.Body).Decode(&req) != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
 	req.AgentID = strings.TrimSpace(req.AgentID)
 	agent, ok := h.agents.Get(req.AgentID)
-	if !ok { writeJSON(w, http.StatusConflict, map[string]any{"error":"agent must register before polling"}); return }
-	if req.Max <= 0 { req.Max = 1 }
+	if !ok {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "agent must register before polling"})
+		return
+	}
+	if req.Max <= 0 {
+		req.Max = 1
+	}
 	usedSNI, usedRoute := h.allocations.Usage(req.AgentID)
 	sniSlots := agent.SNICapacity - usedSNI
 	routeSlots := agent.RouteCapacity - usedRoute
 	leases := h.allocations.Poll(req.AgentID, req.Max, sniSlots, routeSlots)
-	writeJSON(w, http.StatusOK, PollResponse{Revision:h.allocations.Revision(), Leases:leases})
+	writeJSON(w, http.StatusOK, PollResponse{Revision: h.allocations.Revision(), Leases: leases})
 }
 
 func (h *Handler) heartbeat(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	var req HeartbeatRequest
-	if json.NewDecoder(r.Body).Decode(&req) != nil { writeJSON(w, http.StatusBadRequest, map[string]any{"error":"invalid request body"}); return }
+	if json.NewDecoder(r.Body).Decode(&req) != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
 	req.AgentID = strings.TrimSpace(req.AgentID)
-	if !h.agents.Heartbeat(req.AgentID) { writeJSON(w, http.StatusConflict, map[string]any{"error":"agent must register before heartbeat"}); return }
+	if !h.agents.Heartbeat(req.AgentID) {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "agent must register before heartbeat"})
+		return
+	}
 	h.allocations.Heartbeat(req.AgentID, req.LeaseIDs)
-	writeJSON(w, http.StatusOK, HeartbeatResponse{OK:true})
+	writeJSON(w, http.StatusOK, HeartbeatResponse{OK: true})
 }
 
 func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
-	var req ReportRequest
-	if json.NewDecoder(r.Body).Decode(&req) != nil { writeJSON(w, http.StatusBadRequest, map[string]any{"error":"invalid request body"}); return }
-	req.AgentID = strings.TrimSpace(req.AgentID); req.LeaseID = strings.TrimSpace(req.LeaseID)
-	if req.AgentID == "" || req.LeaseID == "" { writeJSON(w, http.StatusBadRequest, map[string]any{"error":"agent_id and lease_id are required"}); return }
-	if !req.Success {
-		if !h.allocations.Fail(req.LeaseID, req.AgentID) { writeJSON(w, http.StatusConflict, map[string]any{"error":"lease failure rejected"}); return }
-		writeJSON(w, http.StatusOK, ReportResponse{OK:true}); return
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
 	}
-	if !h.allocations.Activate(req.LeaseID, req.AgentID, req.Address, req.SNI, req.RouteID) { writeJSON(w, http.StatusConflict, map[string]any{"error":"lease activation rejected"}); return }
-	writeJSON(w, http.StatusOK, ReportResponse{OK:true})
+	var req ReportRequest
+	if json.NewDecoder(r.Body).Decode(&req) != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+	req.AgentID = strings.TrimSpace(req.AgentID)
+	req.LeaseID = strings.TrimSpace(req.LeaseID)
+	if req.AgentID == "" || req.LeaseID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "agent_id and lease_id are required"})
+		return
+	}
+	if !req.Success {
+		if !h.allocations.Fail(req.LeaseID, req.AgentID) {
+			writeJSON(w, http.StatusConflict, map[string]any{"error": "lease failure rejected"})
+			return
+		}
+		writeJSON(w, http.StatusOK, ReportResponse{OK: true})
+		return
+	}
+	if !h.allocations.Activate(req.LeaseID, req.AgentID, req.Address, req.SNI, req.RouteID) {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "lease activation rejected"})
+		return
+	}
+	writeJSON(w, http.StatusOK, ReportResponse{OK: true})
 }
 
 func (h *Handler) agentsList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	writeJSON(w, http.StatusOK, h.agents.List())
 }
 
 func (h *Handler) domainsList(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	writeJSON(w, http.StatusOK, h.domains.List())
 }
 
@@ -108,6 +158,9 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 }
 
 func (h *Handler) handleListLeases(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet { http.Error(w, "method not allowed", http.StatusMethodNotAllowed); return }
-	writeJSON(w, http.StatusOK, LeasesResponse{Revision:h.allocations.Revision(), Leases:h.allocations.List()})
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, http.StatusOK, LeasesResponse{Revision: h.allocations.Revision(), Leases: h.allocations.List()})
 }
