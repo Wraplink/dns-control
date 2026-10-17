@@ -9,6 +9,7 @@ import (
 	"github.com/wraplink/dns-control/internal/agentregistry"
 	"github.com/wraplink/dns-control/internal/allocation"
 	"github.com/wraplink/dns-control/internal/api"
+	"github.com/wraplink/dns-control/internal/backendregistry"
 	"github.com/wraplink/dns-control/internal/config"
 	"github.com/wraplink/dns-control/internal/dns"
 	"github.com/wraplink/dns-control/internal/domain"
@@ -69,6 +70,33 @@ func main() {
 			cfg.Backend.EntitlementRefreshInterval,
 			cfg.Backend.EntitlementMaxStale,
 		)
+
+		if cfg.Node.Enabled() {
+			registryClient := backendregistry.NewClient(
+				cfg.Backend.URL,
+				cfg.Backend.ControlKey,
+			)
+			registration := backendregistry.RegisterRequest{
+				ID:        cfg.Node.ID,
+				Region:    cfg.Node.Region,
+				Addresses: append([]string(nil), cfg.Node.PublicDNS...),
+			}
+			registerDNSControl(registryClient, registration)
+			go runDNSControlRegistration(
+				registryClient,
+				registration,
+				cfg.Node.RegisterInterval,
+			)
+			log.Printf(
+				"backend DNS registration enabled id=%s region=%s addresses=%v interval=%s",
+				cfg.Node.ID,
+				cfg.Node.Region,
+				cfg.Node.PublicDNS,
+				cfg.Node.RegisterInterval,
+			)
+		} else {
+			log.Printf("backend DNS registration disabled; node.public_dns is empty")
+		}
 	} else {
 		log.Printf("backend entitlement sync disabled; managed DNS policies are not client-gated")
 	}
@@ -140,6 +168,31 @@ func refreshEntitlements(
 		store.Count(),
 		snapshot.GeneratedAt.Format(time.RFC3339),
 	)
+}
+
+func runDNSControlRegistration(
+	client *backendregistry.Client,
+	registration backendregistry.RegisterRequest,
+	interval time.Duration,
+) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		registerDNSControl(client, registration)
+	}
+}
+
+func registerDNSControl(
+	client *backendregistry.Client,
+	registration backendregistry.RegisterRequest,
+) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := client.Register(ctx, registration); err != nil {
+		log.Printf("backend DNS registration failed: %v", err)
+	}
 }
 
 func runReconciler(

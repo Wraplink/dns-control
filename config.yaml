@@ -23,6 +23,15 @@ backend:
   entitlement_refresh_interval: 10s
   entitlement_max_stale: 1m
 
+# Advertise the DNS IPs that users can actually configure on their devices.
+# When configured, this dns-control instance registers/heartbeats these addresses
+# to backend, which selects two healthy addresses for the web connection page.
+node:
+  id: ""
+  region: ""
+  public_dns: []
+  register_interval: 15s
+
 domains:
 
   # SNI based hijack. Entitled source IPs receive the allocated edge address;
