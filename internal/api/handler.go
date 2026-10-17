@@ -148,6 +148,7 @@ func (h *Handler) heartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	entitlementRevision, grants := h.entitlementDelta(req.EntitlementRevision)
+	entitlementEnforced := h.entitlements != nil
 
 	_, registered := h.agents.Touch(req.AgentID)
 	if !registered {
@@ -156,6 +157,7 @@ func (h *Handler) heartbeat(w http.ResponseWriter, r *http.Request) {
 			Registered:          false,
 			Revision:            h.allocations.Revision(),
 			ReleaseLeaseIDs:     req.LeaseIDs,
+			EntitlementEnforced: entitlementEnforced,
 			EntitlementRevision: entitlementRevision,
 			Entitlements:        grants,
 		})
@@ -168,6 +170,7 @@ func (h *Handler) heartbeat(w http.ResponseWriter, r *http.Request) {
 		Registered:          true,
 		Revision:            h.allocations.Revision(),
 		ReleaseLeaseIDs:     releases,
+		EntitlementEnforced: entitlementEnforced,
 		EntitlementRevision: entitlementRevision,
 		Entitlements:        grants,
 	})
