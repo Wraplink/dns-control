@@ -7,23 +7,20 @@ import (
 	"time"
 )
 
+type Status string
+
 const (
-	StatusOnline  = "online"
-	StatusOffline = "offline"
+	StatusOnline  Status = "online"
+	StatusOffline Status = "offline"
 )
 
-type Capacity struct {
-	SNI   int `json:"sni"`
-	Route int `json:"route"`
-}
-
 type Agent struct {
-	ID           string    `json:"id"`
-	Region       string    `json:"region,omitempty"`
-	Capacity     Capacity  `json:"capacity"`
-	Status       string    `json:"status"`
-	RegisteredAt time.Time `json:"registered_at"`
-	LastSeenAt   time.Time `json:"last_seen_at"`
+	ID            string    `json:"id"`
+	SNICapacity   int       `json:"sni_capacity"`
+	RouteCapacity int       `json:"route_capacity"`
+	Status        Status    `json:"status"`
+	RegisteredAt  time.Time `json:"registered_at"`
+	LastSeenAt    time.Time `json:"last_seen_at"`
 }
 
 type Store struct {
@@ -35,23 +32,19 @@ func NewStore() *Store {
 	return &Store{agents: make(map[string]*Agent)}
 }
 
-func (s *Store) Upsert(id, region string, capacity Capacity) Agent {
-	id = strings.TrimSpace(id)
-	region = strings.TrimSpace(region)
-	if capacity.SNI < 0 {
-		capacity.SNI = 0
-	}
-	if capacity.Route < 0 {
-		capacity.Route = 0
-	}
+func normalizeID(value string) string {
+	return strings.TrimSpace(value)
+}
 
+func (s *Store) Register(id string, sniCapacity, routeCapacity int) Agent {
+	id = normalizeID(id)
 	now := time.Now().UTC()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	agent, ok := s.agents[id]
-	if !ok {
+	agent, exists := s.agents[id]
+	if !exists {
 		agent = &Agent{
 			ID:           id,
 			RegisteredAt: now,
@@ -59,32 +52,32 @@ func (s *Store) Upsert(id, region string, capacity Capacity) Agent {
 		s.agents[id] = agent
 	}
 
-	agent.Region = region
-	agent.Capacity = capacity
+	agent.SNICapacity = max(sniCapacity, 0)
+	agent.RouteCapacity = max(routeCapacity, 0)
 	agent.Status = StatusOnline
 	agent.LastSeenAt = now
 
 	return *agent
 }
 
-func (s *Store) Touch(id string) (Agent, bool) {
-	id = strings.TrimSpace(id)
+func (s *Store) Heartbeat(id string) bool {
+	id = normalizeID(id)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	agent, ok := s.agents[id]
 	if !ok {
-		return Agent{}, false
+		return false
 	}
 
 	agent.Status = StatusOnline
 	agent.LastSeenAt = time.Now().UTC()
-	return *agent, true
+	return true
 }
 
 func (s *Store) Get(id string) (Agent, bool) {
-	id = strings.TrimSpace(id)
+	id = normalizeID(id)
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -93,22 +86,8 @@ func (s *Store) Get(id string) (Agent, bool) {
 	if !ok {
 		return Agent{}, false
 	}
+
 	return *agent, true
-}
-
-func (s *Store) MarkOfflineBefore(cutoff time.Time) int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	changed := 0
-	for _, agent := range s.agents {
-		if agent.Status == StatusOffline || !agent.LastSeenAt.Before(cutoff) {
-			continue
-		}
-		agent.Status = StatusOffline
-		changed++
-	}
-	return changed
 }
 
 func (s *Store) List() []Agent {
@@ -123,5 +102,20 @@ func (s *Store) List() []Agent {
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].ID < result[j].ID
 	})
+
 	return result
+}
+
+func (s *Store) MarkOfflineBefore(cutoff time.Time) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	count := 0
+	for _, agent := range s.agents {
+		if agent.Status == StatusOnline && agent.LastSeenAt.Before(cutoff) {
+			agent.Status = StatusOffline
+			count++
+		}
+	}
+	return count
 }

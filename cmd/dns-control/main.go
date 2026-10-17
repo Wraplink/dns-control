@@ -1,10 +1,8 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"log"
-	"time"
 
 	"github.com/wraplink/dns-control/internal/agentregistry"
 	"github.com/wraplink/dns-control/internal/allocation"
@@ -12,7 +10,6 @@ import (
 	"github.com/wraplink/dns-control/internal/config"
 	"github.com/wraplink/dns-control/internal/dns"
 	"github.com/wraplink/dns-control/internal/domain"
-	"github.com/wraplink/dns-control/internal/entitlement"
 )
 
 func main() {
@@ -33,71 +30,24 @@ func main() {
 		log.Fatalf("create domain store: %v", err)
 	}
 
-	allocationStore := allocation.NewStore(cfg.Agent.LeaseDuration)
+	allocationStore := allocation.NewStore()
 	agentStore := agentregistry.NewStore()
 
-	for _, rule := range domainStore.List() {
+	for _, rule := range cfg.Domains {
 		switch rule.Mode {
 		case domain.ModeHijack:
 			allocationStore.EnsurePending(rule.Domain, allocation.TypeSNI)
 		case domain.ModeRoute:
-			allocationStore.EnsureRoutePending(
-				rule.Domain,
-				rule.Route.DestinationIP,
-				rule.Route.Protocol,
-				rule.Route.DestinationPortStart,
-				rule.Route.DestinationPortEnd,
-			)
+			allocationStore.EnsurePending(rule.Domain, allocation.TypeRoute)
 		}
 	}
 
-	var entitlementStore *entitlement.Store
-	if cfg.Backend.Enabled() {
-		entitlementStore = entitlement.NewStore(cfg.Backend.EntitlementMaxStale)
-		backendClient := entitlement.NewClient(cfg.Backend.URL, cfg.Backend.ControlKey)
-
-		refreshEntitlements(backendClient, entitlementStore)
-		go runEntitlementSync(
-			backendClient,
-			entitlementStore,
-			cfg.Backend.EntitlementRefreshInterval,
-		)
-
-		log.Printf(
-			"backend entitlement sync enabled url=%s interval=%s max_stale=%s",
-			cfg.Backend.URL,
-			cfg.Backend.EntitlementRefreshInterval,
-			cfg.Backend.EntitlementMaxStale,
-		)
-	} else {
-		log.Printf("backend entitlement sync disabled; managed DNS policies are not client-gated")
-	}
-
 	resolver := dns.NewResolver(cfg.DNS.Upstream)
-	dnsHandler := dns.NewHandler(
-		resolver,
-		domainStore,
-		allocationStore,
-		entitlementStore,
-		cfg.DNS.TTL,
-	)
+	dnsHandler := dns.NewHandler(resolver, domainStore, allocationStore, cfg.DNS.TTL)
 	dnsServer := dns.NewServer(cfg.DNS.Listen, dnsHandler)
 
-	apiHandler := api.NewHandler(
-		domainStore,
-		allocationStore,
-		agentStore,
-		entitlementStore,
-		cfg.Agent.Token,
-	)
+	apiHandler := api.NewHandler(domainStore, allocationStore, agentStore, cfg.Agent.Token)
 	apiServer := api.NewServer(cfg.API.Listen, apiHandler)
-
-	go runReconciler(
-		allocationStore,
-		agentStore,
-		cfg.Agent.OfflineAfter,
-		cfg.Agent.ReconcileInterval,
-	)
 
 	errCh := make(chan error, 2)
 	go func() { errCh <- dnsServer.Start() }()
@@ -105,69 +55,5 @@ func main() {
 
 	if err := <-errCh; err != nil {
 		log.Fatal(err)
-	}
-}
-
-func runEntitlementSync(
-	client *entitlement.Client,
-	store *entitlement.Store,
-	interval time.Duration,
-) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		refreshEntitlements(client, store)
-	}
-}
-
-func refreshEntitlements(
-	client *entitlement.Client,
-	store *entitlement.Store,
-) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	snapshot, err := client.Fetch(ctx)
-	if err != nil {
-		log.Printf("backend entitlement refresh failed: %v", err)
-		return
-	}
-
-	store.Replace(snapshot)
-	log.Printf(
-		"backend entitlements refreshed count=%d generated_at=%s",
-		store.Count(),
-		snapshot.GeneratedAt.Format(time.RFC3339),
-	)
-}
-
-func runReconciler(
-	allocations *allocation.Store,
-	agents *agentregistry.Store,
-	offlineAfter time.Duration,
-	interval time.Duration,
-) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	reconcile := func() {
-		requeued := allocations.ReconcileExpired()
-		offline := agents.MarkOfflineBefore(
-			time.Now().UTC().Add(-offlineAfter),
-		)
-
-		if requeued > 0 || offline > 0 {
-			log.Printf(
-				"control-plane: reconciled expired_leases=%d offline_agents=%d",
-				requeued,
-				offline,
-			)
-		}
-	}
-
-	reconcile()
-	for range ticker.C {
-		reconcile()
 	}
 }

@@ -3,13 +3,14 @@ package api
 import (
 	"github.com/wraplink/dns-control/internal/agentregistry"
 	"github.com/wraplink/dns-control/internal/allocation"
-	"github.com/wraplink/dns-control/internal/entitlement"
 )
 
 type RegisterRequest struct {
-	AgentID  string                 `json:"agent_id"`
-	Region   string                 `json:"region,omitempty"`
-	Capacity agentregistry.Capacity `json:"capacity"`
+	AgentID  string `json:"agent_id"`
+	Capacity struct {
+		SNI   int `json:"sni"`
+		Route int `json:"route"`
+	} `json:"capacity"`
 }
 
 type RegisterResponse struct {
@@ -18,8 +19,8 @@ type RegisterResponse struct {
 }
 
 type PollRequest struct {
-	AgentID   string                 `json:"agent_id"`
-	Available agentregistry.Capacity `json:"available"`
+	AgentID string `json:"agent_id"`
+	Max     int    `json:"max"`
 }
 
 type PollResponse struct {
@@ -28,27 +29,18 @@ type PollResponse struct {
 }
 
 type HeartbeatRequest struct {
-	AgentID             string   `json:"agent_id"`
-	LeaseIDs            []string `json:"lease_ids"`
-	EntitlementRevision uint64   `json:"entitlement_revision"`
+	AgentID  string   `json:"agent_id"`
+	LeaseIDs []string `json:"lease_ids"`
 }
 
 type HeartbeatResponse struct {
-	OK                  bool                `json:"ok"`
-	Registered          bool                `json:"registered"`
-	Revision            uint64              `json:"revision"`
-	ReleaseLeaseIDs     []string            `json:"release_lease_ids,omitempty"`
-	EntitlementEnforced bool                `json:"entitlement_enforced"`
-	EntitlementRevision uint64              `json:"entitlement_revision"`
-	Entitlements        []entitlement.Grant `json:"entitlements,omitempty"`
+	OK bool `json:"ok"`
 }
 
 type ReportRequest struct {
 	AgentID string `json:"agent_id"`
 	LeaseID string `json:"lease_id"`
-
-	Success bool `json:"success"`
-
+	Success bool   `json:"success"`
 	Address string `json:"address,omitempty"`
 	SNI     string `json:"sni,omitempty"`
 	RouteID string `json:"route_id,omitempty"`
@@ -61,8 +53,4 @@ type ReportResponse struct {
 type LeasesResponse struct {
 	Revision uint64             `json:"revision"`
 	Leases   []allocation.Lease `json:"leases"`
-}
-
-type AgentsResponse struct {
-	Agents []agentregistry.Agent `json:"agents"`
 }
