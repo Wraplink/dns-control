@@ -26,9 +26,9 @@ type Snapshot struct {
 type Store struct {
 	mu sync.RWMutex
 
-	byIP       map[string]Item
+	byIP        map[string]Item
 	refreshedAt time.Time
-	maxStale   time.Duration
+	maxStale    time.Duration
 }
 
 func NewStore(maxStale time.Duration) *Store {
