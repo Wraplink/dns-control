@@ -9,26 +9,30 @@ import (
 
 	"github.com/wraplink/dns-control/internal/allocation"
 	"github.com/wraplink/dns-control/internal/domain"
+	"github.com/wraplink/dns-control/internal/entitlement"
 )
 
 type Handler struct {
-	resolver    *Resolver
-	domains     *domain.Store
-	allocations *allocation.Store
-	ttl         uint32
+	resolver     *Resolver
+	domains      *domain.Store
+	allocations  *allocation.Store
+	entitlements *entitlement.Store
+	ttl          uint32
 }
 
 func NewHandler(
 	resolver *Resolver,
 	domains *domain.Store,
 	allocations *allocation.Store,
+	entitlements *entitlement.Store,
 	ttl uint32,
 ) *Handler {
 	return &Handler{
-		resolver:    resolver,
-		domains:     domains,
-		allocations: allocations,
-		ttl:         ttl,
+		resolver:     resolver,
+		domains:      domains,
+		allocations:  allocations,
+		entitlements: entitlements,
+		ttl:          ttl,
 	}
 }
 
@@ -42,34 +46,39 @@ func (h *Handler) ServeDNS(
 	}
 
 	question := req.Question[0]
-
 	domainName := normalizeDomain(question.Name)
-
 	rule, matched := h.domains.Match(domainName)
 
-	if !matched {
+	if !matched || rule.Mode == domain.ModeNormal {
 		h.handleNormal(w, req)
 		return
 	}
 
+	if h.entitlements != nil {
+		clientIP := responseWriterIPv4(w)
+		if !h.entitlements.Allowed(clientIP) {
+			log.Printf(
+				"dns: direct fallback for non-entitled client=%q domain=%q mode=%q",
+				ipString(clientIP),
+				domainName,
+				rule.Mode,
+			)
+			h.handleNormal(w, req)
+			return
+		}
+	}
+
 	switch rule.Mode {
-
-	case domain.ModeNormal:
-		h.handleNormal(w, req)
-
 	case domain.ModeHijack:
 		h.handleHijack(w, req, domainName)
-
 	case domain.ModeRoute:
 		h.handleRoute(w, req, domainName)
-
 	default:
 		log.Printf(
 			"dns: unsupported mode=%q domain=%q",
 			rule.Mode,
 			domainName,
 		)
-
 		h.handleNormal(w, req)
 	}
 }
@@ -79,10 +88,8 @@ func (h *Handler) handleNormal(
 	req *mdns.Msg,
 ) {
 	resp, err := h.resolver.Resolve(req)
-
 	if err != nil {
 		log.Printf("dns: upstream resolution failed: %v", err)
-
 		h.serverFailure(w, req)
 		return
 	}
@@ -97,59 +104,30 @@ func (h *Handler) handleHijack(
 	req *mdns.Msg,
 	domainName string,
 ) {
-	/*
-		HIJACK only changes A records.
-
-		AAAA, CNAME, TXT, etc. are resolved normally.
-	*/
 	if req.Question[0].Qtype != mdns.TypeA {
 		h.handleNormal(w, req)
 		return
 	}
 
 	allocation, ok := h.allocations.Get(domainName)
-
 	if !ok {
-		log.Printf(
-			"dns: no SNI allocation for %q",
-			domainName,
-		)
-
+		log.Printf("dns: no SNI allocation for %q", domainName)
 		h.handleNormal(w, req)
 		return
 	}
 
 	ip := net.ParseIP(allocation.Address)
-
 	if ip == nil || ip.To4() == nil {
 		log.Printf(
 			"dns: invalid SNI allocation address domain=%q address=%q",
 			domainName,
 			allocation.Address,
 		)
-
 		h.handleNormal(w, req)
 		return
 	}
 
-	resp := new(mdns.Msg)
-	resp.SetReply(req)
-
-	resp.Answer = []mdns.RR{
-		&mdns.A{
-			Hdr: mdns.RR_Header{
-				Name:   req.Question[0].Name,
-				Rrtype: mdns.TypeA,
-				Class:  mdns.ClassINET,
-				Ttl:    h.ttl,
-			},
-			A: ip.To4(),
-		},
-	}
-
-	if err := w.WriteMsg(resp); err != nil {
-		log.Printf("dns: write hijack response: %v", err)
-	}
+	h.writeAddressResponse(w, req, ip.To4())
 }
 
 func (h *Handler) handleRoute(
@@ -157,50 +135,39 @@ func (h *Handler) handleRoute(
 	req *mdns.Msg,
 	domainName string,
 ) {
-	/*
-		ROUTE is different from HIJACK.
-
-		The DNS server does not itself transport UDP traffic.
-
-		The agent allocates a routing endpoint, while the
-		network/route component handles the actual traffic.
-
-		For DNS, we currently return the allocated routing
-		endpoint for A queries.
-	*/
 	if req.Question[0].Qtype != mdns.TypeA {
 		h.handleNormal(w, req)
 		return
 	}
 
 	allocation, ok := h.allocations.Get(domainName)
-
 	if !ok {
-		log.Printf(
-			"dns: no ROUTE allocation for %q",
-			domainName,
-		)
-
+		log.Printf("dns: no ROUTE allocation for %q", domainName)
 		h.handleNormal(w, req)
 		return
 	}
 
 	ip := net.ParseIP(allocation.Address)
-
 	if ip == nil || ip.To4() == nil {
 		log.Printf(
 			"dns: invalid ROUTE address domain=%q address=%q",
 			domainName,
 			allocation.Address,
 		)
-
 		h.handleNormal(w, req)
 		return
 	}
 
+	h.writeAddressResponse(w, req, ip.To4())
+}
+
+func (h *Handler) writeAddressResponse(
+	w mdns.ResponseWriter,
+	req *mdns.Msg,
+	ip net.IP,
+) {
 	resp := new(mdns.Msg)
 	resp.SetReply(req)
-
 	resp.Answer = []mdns.RR{
 		&mdns.A{
 			Hdr: mdns.RR_Header{
@@ -209,12 +176,12 @@ func (h *Handler) handleRoute(
 				Class:  mdns.ClassINET,
 				Ttl:    h.ttl,
 			},
-			A: ip.To4(),
+			A: ip,
 		},
 	}
 
 	if err := w.WriteMsg(resp); err != nil {
-		log.Printf("dns: write route response: %v", err)
+		log.Printf("dns: write managed response: %v", err)
 	}
 }
 
@@ -223,7 +190,6 @@ func (h *Handler) serverFailure(
 	req *mdns.Msg,
 ) {
 	resp := new(mdns.Msg)
-
 	if req != nil {
 		resp.SetRcode(req, mdns.RcodeServerFailure)
 	} else {
@@ -233,6 +199,32 @@ func (h *Handler) serverFailure(
 	if err := w.WriteMsg(resp); err != nil {
 		log.Printf("dns: write SERVFAIL: %v", err)
 	}
+}
+
+func responseWriterIPv4(w mdns.ResponseWriter) net.IP {
+	if w == nil || w.RemoteAddr() == nil {
+		return nil
+	}
+
+	switch addr := w.RemoteAddr().(type) {
+	case *net.UDPAddr:
+		return addr.IP.To4()
+	case *net.TCPAddr:
+		return addr.IP.To4()
+	}
+
+	host, _, err := net.SplitHostPort(w.RemoteAddr().String())
+	if err != nil {
+		return net.ParseIP(w.RemoteAddr().String()).To4()
+	}
+	return net.ParseIP(host).To4()
+}
+
+func ipString(ip net.IP) string {
+	if ip == nil {
+		return "unknown"
+	}
+	return ip.String()
 }
 
 func normalizeDomain(value string) string {
