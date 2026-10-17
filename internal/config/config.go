@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ type Config struct {
 	API     APIConfig     `yaml:"api"`
 	Agent   AgentConfig   `yaml:"agent"`
 	Backend BackendConfig `yaml:"backend"`
+	Node    NodeConfig    `yaml:"node"`
 
 	Domains []domain.Rule `yaml:"domains"`
 }
@@ -43,8 +45,19 @@ type BackendConfig struct {
 	EntitlementMaxStale        time.Duration `yaml:"entitlement_max_stale"`
 }
 
+type NodeConfig struct {
+	ID               string        `yaml:"id"`
+	Region           string        `yaml:"region"`
+	PublicDNS        []string      `yaml:"public_dns"`
+	RegisterInterval time.Duration `yaml:"register_interval"`
+}
+
 func (c BackendConfig) Enabled() bool {
 	return strings.TrimSpace(c.URL) != ""
+}
+
+func (c NodeConfig) Enabled() bool {
+	return strings.TrimSpace(c.ID) != "" || len(c.PublicDNS) > 0
 }
 
 func Load(filename string) (Config, error) {
@@ -62,6 +75,8 @@ func Load(filename string) (Config, error) {
 
 	cfg.Backend.URL = strings.TrimRight(strings.TrimSpace(cfg.Backend.URL), "/")
 	cfg.Backend.ControlKey = strings.TrimSpace(cfg.Backend.ControlKey)
+	cfg.Node.ID = strings.TrimSpace(cfg.Node.ID)
+	cfg.Node.Region = strings.TrimSpace(cfg.Node.Region)
 
 	if cfg.Agent.LeaseDuration == 0 {
 		cfg.Agent.LeaseDuration = 30 * time.Second
@@ -77,6 +92,9 @@ func Load(filename string) (Config, error) {
 	}
 	if cfg.Backend.EntitlementMaxStale == 0 {
 		cfg.Backend.EntitlementMaxStale = time.Minute
+	}
+	if cfg.Node.RegisterInterval == 0 {
+		cfg.Node.RegisterInterval = 15 * time.Second
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -127,6 +145,27 @@ func (c Config) Validate() error {
 		}
 		if c.Backend.EntitlementMaxStale < c.Backend.EntitlementRefreshInterval {
 			return fmt.Errorf("backend.entitlement_max_stale must be greater than or equal to entitlement_refresh_interval")
+		}
+	}
+
+	if c.Node.Enabled() {
+		if backendURL == "" {
+			return fmt.Errorf("node registration requires backend.url and backend.control_key")
+		}
+		if c.Node.ID == "" || len(c.Node.ID) > 128 {
+			return fmt.Errorf("node.id is required and must contain at most 128 characters")
+		}
+		if len(c.Node.PublicDNS) == 0 {
+			return fmt.Errorf("node.public_dns must contain at least one DNS IP address")
+		}
+		for i, address := range c.Node.PublicDNS {
+			address = strings.TrimSpace(address)
+			if address == "" || net.ParseIP(address) == nil {
+				return fmt.Errorf("node.public_dns[%d] must be a valid IP address", i)
+			}
+		}
+		if c.Node.RegisterInterval <= 0 {
+			return fmt.Errorf("node.register_interval must be greater than zero")
 		}
 	}
 
