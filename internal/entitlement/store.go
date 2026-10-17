@@ -2,6 +2,7 @@ package entitlement
 
 import (
 	"net"
+	"sort"
 	"sync"
 	"time"
 )
@@ -23,12 +24,20 @@ type Snapshot struct {
 	Entitlements []Item    `json:"entitlements"`
 }
 
+type Grant struct {
+	EntitlementID  string    `json:"entitlementId"`
+	SubscriptionID string    `json:"subscriptionId"`
+	ClientIP       string    `json:"clientIp"`
+	ExpiresAt      time.Time `json:"expiresAt"`
+}
+
 type Store struct {
 	mu sync.RWMutex
 
-	byIP        map[string]Item
-	refreshedAt time.Time
-	maxStale    time.Duration
+	byIP           map[string]Item
+	refreshedAt    time.Time
+	maxStale       time.Duration
+	accessRevision uint64
 }
 
 func NewStore(maxStale time.Duration) *Store {
@@ -52,6 +61,9 @@ func (s *Store) Replace(snapshot Snapshot) {
 	}
 
 	s.mu.Lock()
+	if !sameAccessSet(s.byIP, items) {
+		s.accessRevision++
+	}
 	s.byIP = items
 	s.refreshedAt = now
 	s.mu.Unlock()
@@ -72,10 +84,7 @@ func (s *Store) Allowed(ip net.IP) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if s.refreshedAt.IsZero() {
-		return false
-	}
-	if s.maxStale > 0 && now.Sub(s.refreshedAt) > s.maxStale {
+	if !s.freshLocked(now) {
 		return false
 	}
 
@@ -99,6 +108,36 @@ func (s *Store) Get(ip net.IP) (Item, bool) {
 	return item, ok
 }
 
+func (s *Store) AccessSnapshot() (uint64, []Grant) {
+	now := time.Now().UTC()
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if !s.freshLocked(now) {
+		return s.accessRevision, []Grant{}
+	}
+
+	result := make([]Grant, 0, len(s.byIP))
+	for _, item := range s.byIP {
+		if !item.ExpiresAt.After(now) || item.RemainingBytes <= 0 {
+			continue
+		}
+		result = append(result, Grant{
+			EntitlementID:  item.EntitlementID,
+			SubscriptionID: item.SubscriptionID,
+			ClientIP:       item.ClientIP,
+			ExpiresAt:      item.ExpiresAt,
+		})
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ClientIP < result[j].ClientIP
+	})
+
+	return s.accessRevision, result
+}
+
 func (s *Store) Count() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -109,6 +148,33 @@ func (s *Store) RefreshedAt() time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.refreshedAt
+}
+
+func (s *Store) freshLocked(now time.Time) bool {
+	if s.refreshedAt.IsZero() {
+		return false
+	}
+	return s.maxStale <= 0 || now.Sub(s.refreshedAt) <= s.maxStale
+}
+
+func sameAccessSet(a, b map[string]Item) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for ip, left := range a {
+		right, ok := b[ip]
+		if !ok {
+			return false
+		}
+		if left.EntitlementID != right.EntitlementID ||
+			left.SubscriptionID != right.SubscriptionID ||
+			!left.ExpiresAt.Equal(right.ExpiresAt) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func canonicalIPv4(value string) string {
