@@ -26,16 +26,11 @@ func NewStore() *Store {
 	}
 }
 
-// List returns a snapshot of all leases.
-//
-// The returned slice contains copies, so callers cannot modify
-// the store without going through Store methods.
 func (s *Store) List() []Lease {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	result := make([]Lease, 0, len(s.leases))
-
 	for _, lease := range s.leases {
 		result = append(result, *lease)
 	}
@@ -53,14 +48,7 @@ func normalize(value string) string {
 	return strings.ToLower(value)
 }
 
-// EnsurePending creates a pending lease for a domain if one does not
-// already exist.
-//
-// The domain is the unique key for now.
-func (s *Store) EnsurePending(
-	domain string,
-	t Type,
-) {
+func (s *Store) EnsurePending(domain string, t Type) {
 	domain = normalize(domain)
 
 	s.mu.Lock()
@@ -71,7 +59,6 @@ func (s *Store) EnsurePending(
 	}
 
 	s.revision++
-
 	s.leases[domain] = &Lease{
 		ID:       uuid.NewString(),
 		Domain:   domain,
@@ -81,54 +68,71 @@ func (s *Store) EnsurePending(
 	}
 }
 
-// Poll assigns pending leases to an agent.
-//
-// ASSIGNED leases whose lease duration has expired are returned
-// to PENDING first, allowing another agent to acquire them.
-func (s *Store) Poll(
-	agentID string,
-	max int,
-) []Lease {
-	if max <= 0 {
+// Usage returns assigned + active lease counts owned by an agent.
+func (s *Store) Usage(agentID string) (sni int, route int) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for _, lease := range s.leases {
+		if lease.AgentID != agentID || (lease.State != StateAssigned && lease.State != StateActive) {
+			continue
+		}
+		switch lease.Type {
+		case TypeSNI:
+			sni++
+		case TypeRoute:
+			route++
+		}
+	}
+	return sni, route
+}
+
+// Poll assigns pending leases without exceeding the registered per-type capacity.
+func (s *Store) Poll(agentID string, maxItems, sniSlots, routeSlots int) []Lease {
+	if maxItems <= 0 || (sniSlots <= 0 && routeSlots <= 0) {
 		return nil
 	}
 
 	now := time.Now()
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	result := make([]Lease, 0, max)
-
+	// Timed-out ASSIGNED leases were never activated and are safe to requeue.
 	for _, lease := range s.leases {
-
-		// Reclaim expired assignments.
-		if lease.State == StateAssigned &&
-			!lease.ExpiresAt.IsZero() &&
-			now.After(lease.ExpiresAt) {
-
-			lease.State = StatePending
-			lease.AgentID = ""
-			lease.ExpiresAt = time.Time{}
-
-			s.revision++
-			lease.Revision = s.revision
+		if lease.State == StateAssigned && !lease.ExpiresAt.IsZero() && now.After(lease.ExpiresAt) {
+			s.requeueLocked(lease)
 		}
+	}
 
+	result := make([]Lease, 0, maxItems)
+	for _, lease := range s.leases {
 		if lease.State != StatePending {
 			continue
 		}
 
-		s.revision++
+		switch lease.Type {
+		case TypeSNI:
+			if sniSlots <= 0 {
+				continue
+			}
+			sniSlots--
+		case TypeRoute:
+			if routeSlots <= 0 {
+				continue
+			}
+			routeSlots--
+		default:
+			continue
+		}
 
+		s.revision++
 		lease.State = StateAssigned
 		lease.AgentID = agentID
 		lease.Revision = s.revision
 		lease.ExpiresAt = now.Add(s.leaseDuration)
-
 		result = append(result, *lease)
 
-		if len(result) >= max {
+		if len(result) >= maxItems {
 			break
 		}
 	}
@@ -136,111 +140,97 @@ func (s *Store) Poll(
 	return result
 }
 
-// Heartbeat renews the lease expiration for leases owned by agentID.
-//
-// Unknown lease IDs are ignored.
-// Leases belonging to another agent are ignored.
-func (s *Store) Heartbeat(
-	agentID string,
-	leaseIDs []string,
-) {
+func (s *Store) Heartbeat(agentID string, leaseIDs []string) {
 	if agentID == "" || len(leaseIDs) == 0 {
 		return
 	}
 
+	wanted := make(map[string]struct{}, len(leaseIDs))
+	for _, id := range leaseIDs {
+		wanted[id] = struct{}{}
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	now := time.Now()
-	expiresAt := now.Add(s.leaseDuration)
-
+	expiresAt := time.Now().Add(s.leaseDuration)
 	for _, lease := range s.leases {
-
 		if lease.AgentID != agentID {
 			continue
 		}
-
-		for _, id := range leaseIDs {
-
-			if lease.ID != id {
-				continue
-			}
-
+		if _, ok := wanted[lease.ID]; ok {
 			lease.ExpiresAt = expiresAt
-
-			break
 		}
 	}
 }
 
-// Activate changes an assigned lease to ACTIVE after the agent
-// successfully configured its dataplane.
-func (s *Store) Activate(
-	leaseID string,
-	agentID string,
-	address string,
-	sni string,
-	routeID string,
-) bool {
+func (s *Store) Activate(leaseID, agentID, address, sni, routeID string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for _, lease := range s.leases {
-
 		if lease.ID != leaseID {
 			continue
 		}
-
-		// Only the agent that owns the assignment may activate it.
-		if lease.AgentID != agentID {
-			return false
-		}
-
-		// Only ASSIGNED leases can become ACTIVE.
-		if lease.State != StateAssigned {
+		if lease.AgentID != agentID || lease.State != StateAssigned {
 			return false
 		}
 
 		s.revision++
-
 		lease.State = StateActive
 		lease.Address = address
 		lease.SNI = sni
 		lease.RouteID = routeID
 		lease.Revision = s.revision
-
-		// ACTIVE leases still need to be renewed by heartbeat.
 		lease.ExpiresAt = time.Now().Add(s.leaseDuration)
-
 		return true
 	}
-
 	return false
 }
 
-func (s *Store) Get(
-	domain string,
-) (*Lease, bool) {
+// Fail returns a failed assignment to the pending pool immediately.
+func (s *Store) Fail(leaseID, agentID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, lease := range s.leases {
+		if lease.ID != leaseID {
+			continue
+		}
+		if lease.AgentID != agentID || lease.State != StateAssigned {
+			return false
+		}
+		s.requeueLocked(lease)
+		return true
+	}
+	return false
+}
+
+func (s *Store) requeueLocked(lease *Lease) {
+	s.revision++
+	lease.State = StatePending
+	lease.AgentID = ""
+	lease.Address = ""
+	lease.SNI = ""
+	lease.RouteID = ""
+	lease.ExpiresAt = time.Time{}
+	lease.Revision = s.revision
+}
+
+func (s *Store) Get(domain string) (*Lease, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	domain = normalize(domain)
-
-	lease, ok := s.leases[domain]
-
+	lease, ok := s.leases[normalize(domain)]
 	if !ok {
 		return nil, false
 	}
-
-	// Return a copy so the caller cannot modify internal state.
 	copy := *lease
-
 	return &copy, true
 }
 
 func (s *Store) Revision() uint64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-
 	return s.revision
 }
