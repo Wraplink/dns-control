@@ -38,6 +38,7 @@ type Store struct {
 	refreshedAt    time.Time
 	maxStale       time.Duration
 	accessRevision uint64
+	accessStale    bool
 }
 
 func NewStore(maxStale time.Duration) *Store {
@@ -61,11 +62,12 @@ func (s *Store) Replace(snapshot Snapshot) {
 	}
 
 	s.mu.Lock()
-	if !sameAccessSet(s.byIP, items) {
+	if s.accessStale || !sameAccessSet(s.byIP, items) {
 		s.accessRevision++
 	}
 	s.byIP = items
 	s.refreshedAt = now
+	s.accessStale = false
 	s.mu.Unlock()
 }
 
@@ -111,10 +113,14 @@ func (s *Store) Get(ip net.IP) (Item, bool) {
 func (s *Store) AccessSnapshot() (uint64, []Grant) {
 	now := time.Now().UTC()
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if !s.freshLocked(now) {
+		if !s.accessStale {
+			s.accessRevision++
+			s.accessStale = true
+		}
 		return s.accessRevision, []Grant{}
 	}
 
