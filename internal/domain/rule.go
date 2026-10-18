@@ -7,12 +7,12 @@ import (
 )
 
 type Rule struct {
-	Domain string       `yaml:"domain" json:"domain"`
-	Mode   Mode         `yaml:"mode" json:"mode"`
+	Domain string `yaml:"domain" json:"domain"`
+	Mode   Mode   `yaml:"mode" json:"mode"`
 	// ConnectionModes scopes managed rules per client. Empty means all modes.
 	// Smart always preserves legacy managed DNS policy behavior.
-	ConnectionModes []string `yaml:"connection_modes,omitempty" json:"connection_modes,omitempty"`
-	Route  *RoutePolicy `yaml:"route,omitempty" json:"route,omitempty"`
+	ConnectionModes []string     `yaml:"connection_modes,omitempty" json:"connection_modes,omitempty"`
+	Route           *RoutePolicy `yaml:"route,omitempty" json:"route,omitempty"`
 }
 
 type RoutePolicy struct {
