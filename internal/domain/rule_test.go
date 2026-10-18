@@ -130,8 +130,8 @@ func TestConnectionModeMatching(t *testing.T) {
 
 func TestConnectionModeRejectsUnsupportedSelector(t *testing.T) {
 	rule := Rule{
-		Domain: "example.com",
-		Mode: ModeHijack,
+		Domain:          "example.com",
+		Mode:            ModeHijack,
 		ConnectionModes: []string{"speed-booster"},
 	}
 	if err := rule.Validate(); err == nil {
