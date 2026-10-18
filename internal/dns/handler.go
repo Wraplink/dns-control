@@ -77,9 +77,9 @@ func (h *Handler) ServeDNS(
 
 	switch rule.Mode {
 	case domain.ModeHijack:
-		h.handleHijack(w, req, domainName)
+		h.handleHijack(w, req, rule.Domain)
 	case domain.ModeRoute:
-		h.handleRoute(w, req, domainName)
+		h.handleRoute(w, req, rule.Domain)
 	default:
 		log.Printf(
 			"dns: unsupported mode=%q domain=%q",
