@@ -99,3 +99,42 @@ func TestNonRouteRuleRejectsRoutePolicy(t *testing.T) {
 		t.Fatal("expected route policy on normal mode to fail")
 	}
 }
+
+func TestConnectionModeMatching(t *testing.T) {
+	gaming := Rule{
+		Domain:          "playstation.com",
+		Mode:            ModeHijack,
+		ConnectionModes: []string{" GAMING "},
+	}.Normalize()
+	if err := gaming.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		mode string
+		want bool
+	}{
+		{"smart", true},
+		{"gaming", true},
+		{"streaming", false},
+		{"", true}, // legacy entitlement treated as smart
+		{"invalid", false},
+	} {
+		if got := gaming.AppliesTo(tc.mode); got != tc.want {
+			t.Errorf("mode=%q: got %t, want %t", tc.mode, got, tc.want)
+		}
+	}
+	if got := (Rule{Mode: ModeHijack}).AppliesTo("streaming"); !got {
+		t.Fatal("legacy untagged rule must work in all known modes")
+	}
+}
+
+func TestConnectionModeRejectsUnsupportedSelector(t *testing.T) {
+	rule := Rule{
+		Domain: "example.com",
+		Mode: ModeHijack,
+		ConnectionModes: []string{"speed-booster"},
+	}
+	if err := rule.Validate(); err == nil {
+		t.Fatal("expected unknown mode selector to be rejected")
+	}
+}
