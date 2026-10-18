@@ -45,7 +45,7 @@ func TestPerClientModeChangesActualDNSAnswer(t *testing.T) {
 			m.SetReply(r)
 			m.Answer = []mdns.RR{&mdns.A{
 				Hdr: mdns.RR_Header{Name: r.Question[0].Name, Rrtype: mdns.TypeA, Class: mdns.ClassINET, Ttl: 30},
-				A: net.ParseIP("192.0.2.10"),
+				A:   net.ParseIP("192.0.2.10"),
 			}}
 			_ = w.WriteMsg(m)
 		}),
@@ -76,7 +76,7 @@ func TestPerClientModeChangesActualDNSAnswer(t *testing.T) {
 	}})
 
 	handler := NewHandler(NewResolver([]string{packetConn.LocalAddr().String()}), rules, leases, access, 30)
-	for _, tc := range []struct{
+	for _, tc := range []struct {
 		client, want string
 	}{
 		{"203.0.113.10", "198.51.100.30"},
