@@ -1,13 +1,11 @@
 dns:
-  listen: ":8053"
-  upstream:
-    - "1.1.1.1:53"
-    - "8.8.8.8:53"
-    - "9.9.9.9:53"
+  listen: ${DNS_LISTEN}
+
+  upstream: [${DNS_UPSTREAM}]
   ttl: 30
 
 api:
-  listen: ":8080"
+  listen: ${API_LISTEN}
 
 agent:
   token: "CHANGE-ME"
@@ -27,9 +25,11 @@ backend:
 # When configured, this dns-control instance registers/heartbeats these addresses
 # to backend, which selects two healthy addresses for the web connection page.
 node:
-  id: ""
-  region: ""
-  public_dns: []
+  id: "dns-fra-01"
+  region: "eu-central"
+  public_dns:
+    - 127.0.0.1
+    - 192.168.108.134
   register_interval: 15s
 
 domains:
