@@ -158,3 +158,28 @@ func TestReplaceCanonicalizesIPv4(t *testing.T) {
 		t.Fatal("invalid IPv4 should not be cached")
 	}
 }
+
+func TestConnectionModesStoredBySourceIP(t *testing.T) {
+	store := NewStore(time.Minute)
+	store.Replace(Snapshot{
+		Entitlements: []Item{
+			{ClientIP: "203.0.113.10", ConnectionMode: "gaming", RemainingBytes: 100, ExpiresAt: time.Now().Add(time.Hour)},
+			{ClientIP: "203.0.113.11", ConnectionMode: "streaming", RemainingBytes: 100, ExpiresAt: time.Now().Add(time.Hour)},
+			{ClientIP: "203.0.113.12", RemainingBytes: 100, ExpiresAt: time.Now().Add(time.Hour)},
+			{ClientIP: "203.0.113.13", ConnectionMode: "unknown", RemainingBytes: 100, ExpiresAt: time.Now().Add(time.Hour)},
+		},
+	})
+	for ip, expectedMode := range map[string]string{
+		"203.0.113.10": "gaming",
+		"203.0.113.11": "streaming",
+		"203.0.113.12": "smart",
+	} {
+		got, ok := store.Get(net.ParseIP(ip))
+		if !ok || got.ConnectionMode != expectedMode {
+			t.Errorf("IP %s: got mode %q allowed=%t; want %q", ip, got.ConnectionMode, ok, expectedMode)
+		}
+	}
+	if store.Allowed(net.ParseIP("203.0.113.13")) {
+		t.Fatal("unknown mode must not silently enable managed DNS policy")
+	}
+}

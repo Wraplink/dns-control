@@ -13,6 +13,7 @@ type Item struct {
 	SubscriptionID string    `json:"subscriptionId"`
 	ClientIP       string    `json:"clientIp"`
 	PlanCode       string    `json:"planCode"`
+	ConnectionMode string    `json:"connectionMode"`
 	DataLimitBytes int64     `json:"dataLimitBytes"`
 	UsedBytes      int64     `json:"usedBytes"`
 	RemainingBytes int64     `json:"remainingBytes"`
@@ -58,6 +59,12 @@ func (s *Store) Replace(snapshot Snapshot) {
 			continue
 		}
 		item.ClientIP = ip
+		if item.ConnectionMode == "" {
+			item.ConnectionMode = "smart" // legacy backend snapshots
+		}
+		if item.ConnectionMode != "smart" && item.ConnectionMode != "gaming" && item.ConnectionMode != "streaming" {
+			continue // reject invalid policy modes rather than apply the wrong rule
+		}
 		items[ip] = item
 	}
 

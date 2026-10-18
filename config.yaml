@@ -38,6 +38,9 @@ domains:
   # non-entitled clients resolve normally through the upstream resolvers.
   - domain: "playstation.com"
     mode: "hijack"
+    # Smart keeps all managed policies. Gaming enables gaming-tagged rules;
+    # Streaming will resolve this domain through the ordinary upstream.
+    connection_modes: ["gaming"]
 
   # Route mode requires an explicit IPv4 destination, protocol and optional
   # destination-port range. Keep examples commented until a real relay/origin
@@ -45,11 +48,18 @@ domains:
   #
   # - domain: "game.example.com"
   #   mode: "route"
+  #   connection_modes: ["gaming"]
   #   route:
   #     destination_ip: "YOUR_RELAY_IPV4"
   #     protocol: "udp"
   #     destination_port_start: 30000
   #     destination_port_end: 31000
+
+  # Streaming rules must point at a REAL provisioned SNI/route endpoint.
+  # Merely tagging a domain cannot provide a streaming bypass or improve speed.
+  # - domain: "stream.example.com"
+  #   mode: "hijack"
+  #   connection_modes: ["streaming"]
 
   # Normal DNS resolution.
   - domain: "google.com"

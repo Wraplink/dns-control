@@ -56,13 +56,20 @@ func (h *Handler) ServeDNS(
 
 	if h.entitlements != nil {
 		clientIP := responseWriterIPv4(w)
-		if !h.entitlements.Allowed(clientIP) {
+		entitlement, allowed := h.entitlements.Get(clientIP)
+		if !allowed {
 			log.Printf(
 				"dns: direct fallback for non-entitled client=%q domain=%q mode=%q",
 				ipString(clientIP),
 				domainName,
 				rule.Mode,
 			)
+			h.handleNormal(w, req)
+			return
+		}
+		if !rule.AppliesTo(entitlement.ConnectionMode) {
+			// This client selected another profile. Return the ordinary
+			// upstream DNS answer; never apply someone else's mode.
 			h.handleNormal(w, req)
 			return
 		}

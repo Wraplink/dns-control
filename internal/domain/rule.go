@@ -7,9 +7,12 @@ import (
 )
 
 type Rule struct {
-	Domain string       `yaml:"domain" json:"domain"`
-	Mode   Mode         `yaml:"mode" json:"mode"`
-	Route  *RoutePolicy `yaml:"route,omitempty" json:"route,omitempty"`
+	Domain string `yaml:"domain" json:"domain"`
+	Mode   Mode   `yaml:"mode" json:"mode"`
+	// ConnectionModes scopes managed rules per client. Empty means all modes.
+	// Smart always preserves legacy managed DNS policy behavior.
+	ConnectionModes []string     `yaml:"connection_modes,omitempty" json:"connection_modes,omitempty"`
+	Route           *RoutePolicy `yaml:"route,omitempty" json:"route,omitempty"`
 }
 
 type RoutePolicy struct {
@@ -21,6 +24,9 @@ type RoutePolicy struct {
 
 func (r Rule) Normalize() Rule {
 	r.Domain = normalizeDomain(r.Domain)
+	for i, mode := range r.ConnectionModes {
+		r.ConnectionModes[i] = strings.ToLower(strings.TrimSpace(mode))
+	}
 
 	if r.Route != nil {
 		route := *r.Route
@@ -43,6 +49,12 @@ func (r Rule) Validate() error {
 			r.Mode,
 			r.Domain,
 		)
+	}
+
+	for _, mode := range r.ConnectionModes {
+		if mode != "gaming" && mode != "streaming" {
+			return fmt.Errorf("invalid connection_mode %q for domain %q (use gaming or streaming)", mode, r.Domain)
+		}
 	}
 
 	if r.Mode != ModeRoute {
@@ -97,6 +109,30 @@ func (r Rule) Validate() error {
 	}
 
 	return nil
+}
+
+// AppliesTo reports whether a managed rule should affect the requesting user.
+// Smart preserves all legacy rules. Unscoped rules apply to all modes.
+// Mode-specific rules apply only to their selected gaming/streaming audience.
+func (r Rule) AppliesTo(connectionMode string) bool {
+	if connectionMode == "" {
+		connectionMode = "smart" // backward compatible snapshots
+	}
+	if connectionMode == "smart" {
+		return true
+	}
+	if connectionMode != "gaming" && connectionMode != "streaming" {
+		return false
+	}
+	if len(r.ConnectionModes) == 0 {
+		return true
+	}
+	for _, mode := range r.ConnectionModes {
+		if mode == connectionMode {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeDomain(value string) string {
