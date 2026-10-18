@@ -28,10 +28,10 @@ func (w *memoryDNSWriter) WriteMsg(msg *mdns.Msg) error {
 	return nil
 }
 func (w *memoryDNSWriter) Write([]byte) (int, error) { return 0, nil }
-func (w *memoryDNSWriter) Close() error { return nil }
-func (w *memoryDNSWriter) TsigStatus() error { return nil }
-func (w *memoryDNSWriter) TsigTimersOnly(bool) {}
-func (w *memoryDNSWriter) Hijack() {}
+func (w *memoryDNSWriter) Close() error              { return nil }
+func (w *memoryDNSWriter) TsigStatus() error         { return nil }
+func (w *memoryDNSWriter) TsigTimersOnly(bool)       {}
+func (w *memoryDNSWriter) Hijack()                   {}
 
 func TestPerClientModeChangesActualDNSAnswer(t *testing.T) {
 	packetConn, err := net.ListenPacket("udp", "127.0.0.1:0")
