@@ -28,7 +28,6 @@ node:
   id: "dns-fra-01"
   region: "eu-central"
   public_dns:
-    - 127.0.0.1
     - 192.168.108.134
   register_interval: 15s
 
