@@ -67,13 +67,7 @@ func (h *Handler) ServeDNS(
 		clientIP := responseWriterIPv4(w)
 		entitlement, allowed := h.entitlements.Get(clientIP)
 		if !allowed {
-			log.Printf(
-				"dns: direct fallback for non-entitled client=%q domain=%q mode=%q",
-				ipString(clientIP),
-				domainName,
-				rule.Mode,
-			)
-			h.handleNormal(w, req)
+			h.serverFailure(w, req)
 			return
 		}
 		if !rule.AppliesTo(entitlement.ConnectionMode) {
