@@ -67,4 +67,3 @@ func TestHijackUsesParentDomainAllocationForSubdomains(t *testing.T) {
 		})
 	}
 }
-
