@@ -82,13 +82,19 @@ func TestPerClientModeChangesActualDNSAnswer(t *testing.T) {
 		{"203.0.113.10", "198.51.100.30"},
 		{"203.0.113.11", "192.0.2.10"},
 		{"203.0.113.12", "198.51.100.30"},
-		{"203.0.113.13", "192.0.2.10"},
+		{"203.0.113.13", ""},
 	} {
 		t.Run(tc.client, func(t *testing.T) {
 			w := &memoryDNSWriter{clientIP: net.ParseIP(tc.client)}
 			q := new(mdns.Msg)
 			q.SetQuestion("playstation.com.", mdns.TypeA)
 			handler.ServeDNS(w, q)
+			if tc.want == "" {
+				if w.response == nil || w.response.Rcode != mdns.RcodeRefused {
+					t.Fatalf("unauthorized client should receive REFUSED: %#v", w.response)
+				}
+				return
+			}
 			if w.response == nil || len(w.response.Answer) != 1 {
 				t.Fatalf("no DNS answer: %#v", w.response)
 			}
