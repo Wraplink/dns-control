@@ -3,13 +3,11 @@ package dns
 import (
 	"net"
 	"testing"
-	"time"
 
 	mdns "github.com/miekg/dns"
 
 	"github.com/wraplink/dns-control/internal/allocation"
 	"github.com/wraplink/dns-control/internal/domain"
-	"github.com/wraplink/dns-control/internal/entitlement"
 )
 
 func TestHijackUsesParentDomainAllocationForSubdomains(t *testing.T) {
