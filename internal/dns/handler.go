@@ -64,8 +64,7 @@ func (h *Handler) ServeDNS(
 	}
 
 	if h.entitlements != nil {
-		clientIP := responseWriterIPv4(w)
-		entitlement, allowed := h.entitlements.Get(clientIP)
+		entitlement, allowed := h.entitlements.Get(responseWriterIPv4(w))
 		if !allowed {
 			h.serverFailure(w, req)
 			return
