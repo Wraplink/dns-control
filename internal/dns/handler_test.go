@@ -11,8 +11,8 @@ import (
 
 func TestHijackUsesParentDomainAllocationForSubdomains(t *testing.T) {
 	rules, err := domain.NewStore([]domain.Rule{{
-		Domain: "playstation.com",
-		Mode: domain.ModeHijack,
+		Domain:          "playstation.com",
+		Mode:            domain.ModeHijack,
 		ConnectionModes: []string{"gaming"},
 	}})
 	if err != nil {
