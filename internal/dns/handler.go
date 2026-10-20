@@ -45,6 +45,15 @@ func (h *Handler) ServeDNS(
 		return
 	}
 
+	// A configured control plane is an allowlist: unauthorized clients must
+	// receive no recursive or managed DNS answers.
+	if h.entitlements != nil && !h.entitlements.Allowed(responseWriterIPv4(w)) {
+		resp := new(mdns.Msg)
+		resp.SetRcode(req, mdns.RcodeRefused)
+		_ = w.WriteMsg(resp)
+		return
+	}
+
 	question := req.Question[0]
 	domainName := normalizeDomain(question.Name)
 	rule, matched := h.domains.Match(domainName)
