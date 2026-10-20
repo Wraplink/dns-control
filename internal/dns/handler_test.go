@@ -84,7 +84,7 @@ func (w *capturingDNSWriter) WriteMsg(msg *mdns.Msg) error {
 	return nil
 }
 func (w *capturingDNSWriter) Write(b []byte) (int, error) { return len(b), nil }
-func (w *capturingDNSWriter) Close() error               { return nil }
-func (w *capturingDNSWriter) TsigStatus() error          { return nil }
-func (w *capturingDNSWriter) TsigTimersOnly(bool)        {}
-func (w *capturingDNSWriter) Hijack()                    {}
+func (w *capturingDNSWriter) Close() error                { return nil }
+func (w *capturingDNSWriter) TsigStatus() error           { return nil }
+func (w *capturingDNSWriter) TsigTimersOnly(bool)         {}
+func (w *capturingDNSWriter) Hijack()                     {}
