@@ -2,6 +2,7 @@ package allocation
 
 import (
 	"sort"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -219,6 +220,37 @@ func (s *Store) Fail(leaseID, agentID string) bool {
 // ActiveCandidates returns a stable ordered snapshot of all non-expired active
 // allocations for a domain. It supports multi-agent leases without exposing
 // the mutable backing store.
+// AddActiveReplica records a separately provisioned agent endpoint for a
+// managed domain. It must only be called after the agent reports successful
+// provisioning; it does not replace the primary lease.
+func (s *Store) AddActiveReplica(domain, agentID, address string) bool {
+	domain = normalize(domain)
+	agentID = strings.TrimSpace(agentID)
+	ip := net.ParseIP(strings.TrimSpace(address))
+	if agentID == "" || ip == nil || ip.To4() == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	primary, ok := s.leases[domain]
+	if !ok || primary.Type != TypeSNI {
+		return false
+	}
+	for _, lease := range s.leases {
+		if lease.Domain == domain && lease.AgentID == agentID && lease.State == StateActive {
+			return false
+		}
+	}
+	s.revision++
+	key := domain + "#replica#" + agentID
+	s.leases[key] = &Lease{
+		ID: uuid.NewString(), Domain: domain, Type: TypeSNI,
+		State: StateActive, AgentID: agentID, Address: ip.To4().String(),
+		Revision: s.revision, ExpiresAt: time.Now().UTC().Add(s.leaseDuration),
+	}
+	return true
+}
+
 func (s *Store) ActiveCandidates(domain string) []Lease {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
