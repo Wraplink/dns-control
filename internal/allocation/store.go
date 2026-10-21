@@ -344,7 +344,12 @@ func (s *Store) reclaimExpiredLocked(now time.Time) int {
 		if lease.ExpiresAt.IsZero() || lease.ExpiresAt.After(now) {
 			continue
 		}
-		s.resetToPendingLocked(lease)
+		if strings.Contains(name, "#replica#") {
+			delete(s.leases, name)
+			s.revision++
+		} else {
+			s.resetToPendingLocked(lease)
+		}
 		changed++
 	}
 	return changed
@@ -374,7 +379,7 @@ func (s *Store) ReconcilePolicies(rules []domain.Rule) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for name, lease := range s.leases {
-		rule, ok := desired[name]
+		rule, ok := desired[lease.Domain]
 		if !ok || (rule.Mode == domain.ModeHijack && lease.Type != TypeSNI) ||
 			(rule.Mode == domain.ModeRoute && (lease.Type != TypeRoute ||
 				rule.Route == nil || lease.DestinationIP != rule.Route.DestinationIP ||
