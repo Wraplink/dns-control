@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/wraplink/dns-control/internal/dns"
-
 	mdns "github.com/miekg/dns"
+
+	"github.com/wraplink/dns-control/internal/dns"
 )
 
 // resolveDNS resolves origin DNS only; it deliberately does not apply
