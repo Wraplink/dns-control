@@ -98,6 +98,7 @@ func main() {
 		allocationStore,
 		entitlementStore,
 		cfg.DNS.TTL,
+		agentStore,
 	)
 	dnsServer := dns.NewServer(cfg.DNS.Listen, dnsHandler)
 
