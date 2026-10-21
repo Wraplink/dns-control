@@ -35,6 +35,19 @@ func NewStore(rules []Rule) (*Store, error) {
 	return s, nil
 }
 
+// Replace atomically publishes a validated domain-policy snapshot.
+// Invalid or duplicate policies leave the current snapshot unchanged.
+func (s *Store) Replace(rules []Rule) error {
+	next, err := NewStore(rules)
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.rules = next.rules
+	s.mu.Unlock()
+	return nil
+}
+
 func (s *Store) Get(domain string) (Rule, bool) {
 	domain = normalizeDomain(domain)
 
