@@ -108,7 +108,7 @@ func (s *Store) Poll(agentID string, sniMax, routeMax int) []Lease {
 
 	for _, name := range domains {
 		lease := s.leases[name]
-		if lease.State != StatePending {
+		if lease.State != StatePending || strings.Contains(name, "#replica#") {
 			continue
 		}
 
@@ -135,6 +135,38 @@ func (s *Store) Poll(agentID string, sniMax, routeMax int) []Lease {
 		result = append(result, *lease)
 	}
 
+	// After assigning primary work, distribute existing SNI policies to
+	// additional agents. Only one lease per agent/domain is permitted.
+	for _, name := range domains {
+		if sniAssigned >= sniMax {
+			break
+		}
+		primary := s.leases[name]
+		if primary.Type != TypeSNI || primary.State != StateActive {
+			continue
+		}
+		alreadyAssigned := false
+		for _, lease := range s.leases {
+			if lease.Domain == primary.Domain && lease.AgentID == agentID &&
+				(lease.State == StateAssigned || lease.State == StateActive) {
+				alreadyAssigned = true
+				break
+			}
+		}
+		if alreadyAssigned {
+			continue
+		}
+		key := primary.Domain + "#replica#" + agentID
+		s.revision++
+		replica := &Lease{
+			ID: uuid.NewString(), Domain: primary.Domain, Type: TypeSNI,
+			State: StateAssigned, AgentID: agentID, SNI: primary.Domain,
+			Revision: s.revision, ExpiresAt: now.Add(s.leaseDuration),
+		}
+		s.leases[key] = replica
+		result = append(result, *replica)
+		sniAssigned++
+	}
 	return result
 }
 
