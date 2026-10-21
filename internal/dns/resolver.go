@@ -1,23 +1,23 @@
 package dns
 
 import (
-	"fmt"
-	"log"
-	"time"
 	"bytes"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	mdns "github.com/miekg/dns"
 )
 
 type Resolver struct {
-	client    *mdns.Client
-	upstreams []string
-	parentURL string
+	client      *mdns.Client
+	upstreams   []string
+	parentURL   string
 	parentToken string
-	httpClient *http.Client
+	httpClient  *http.Client
 }
 
 func NewResolver(upstreams []string) *Resolver {
@@ -25,7 +25,7 @@ func NewResolver(upstreams []string) *Resolver {
 		client: &mdns.Client{
 			Timeout: 5 * time.Second,
 		},
-		upstreams: append([]string(nil), upstreams...),
+		upstreams:  append([]string(nil), upstreams...),
 		httpClient: &http.Client{Timeout: 5 * time.Second},
 	}
 }
