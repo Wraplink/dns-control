@@ -19,6 +19,7 @@ type Store struct {
 	revision uint64
 
 	leaseDuration time.Duration
+	roundRobin map[string]uint64
 }
 
 func NewStore(leaseDuration ...time.Duration) *Store {
@@ -29,6 +30,7 @@ func NewStore(leaseDuration ...time.Duration) *Store {
 
 	return &Store{
 		leases:        make(map[string]*Lease),
+		roundRobin: make(map[string]uint64),
 		leaseDuration: duration,
 	}
 }
@@ -211,6 +213,54 @@ func (s *Store) Fail(leaseID, agentID string) bool {
 
 	s.resetToPendingLocked(lease)
 	return true
+}
+
+
+// ActiveCandidates returns a stable ordered snapshot of all non-expired active
+// allocations for a domain. It supports multi-agent leases without exposing
+// the mutable backing store.
+func (s *Store) ActiveCandidates(domain string) []Lease {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	now := time.Now().UTC()
+	var result []Lease
+	for _, lease := range s.leases {
+		if lease.Domain != normalize(domain) || lease.State != StateActive {
+			continue
+		}
+		if !lease.ExpiresAt.IsZero() && !lease.ExpiresAt.After(now) {
+			continue
+		}
+		result = append(result, *lease)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].AgentID == result[j].AgentID {
+			return result[i].ID < result[j].ID
+		}
+		return result[i].AgentID < result[j].AgentID
+	})
+	return result
+}
+
+// NextCandidate rotates through the eligible candidates. The predicate can
+// exclude offline agents and invalid addresses without consuming a DNS answer.
+func (s *Store) NextCandidate(domain string, eligible func(Lease) bool) (*Lease, bool) {
+	candidates := s.ActiveCandidates(domain)
+	filtered := make([]Lease, 0, len(candidates))
+	for _, lease := range candidates {
+		if eligible == nil || eligible(lease) {
+			filtered = append(filtered, lease)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil, false
+	}
+	s.mu.Lock()
+	index := s.roundRobin[normalize(domain)] % uint64(len(filtered))
+	s.roundRobin[normalize(domain)]++
+	s.mu.Unlock()
+	selected := filtered[index]
+	return &selected, true
 }
 
 func (s *Store) Get(domain string) (*Lease, bool) {
