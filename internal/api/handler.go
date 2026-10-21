@@ -30,12 +30,21 @@ func NewHandler(
 	token string,
 	resolvers ...*dns.Resolver,
 ) http.Handler {
+	return newHandler(domains, allocations, agents, entitlements, token, nil, resolvers...)
+}
+
+func NewHandlerWithSyncStatus(domains *domain.Store, allocations *allocation.Store, agents *agentregistry.Store, entitlements *entitlement.Store, token string, status *DomainSyncStatus, resolvers ...*dns.Resolver) http.Handler {
+	return newHandler(domains, allocations, agents, entitlements, token, status, resolvers...)
+}
+
+func newHandler(domains *domain.Store, allocations *allocation.Store, agents *agentregistry.Store, entitlements *entitlement.Store, token string, status *DomainSyncStatus, resolvers ...*dns.Resolver) http.Handler {
 	h := &Handler{
 		domains:      domains,
 		allocations:  allocations,
 		agents:       agents,
 		entitlements: entitlements,
 		token:        token,
+		syncStatus: status,
 	}
 
 	if len(resolvers) > 0 {
