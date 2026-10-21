@@ -20,6 +20,7 @@ type Handler struct {
 	allocations  *allocation.Store
 	entitlements *entitlement.Store
 	ttl          uint32
+	allowLoopbackQueries bool
 }
 
 func NewHandler(
@@ -43,6 +44,11 @@ func NewHandler(
 	return h
 }
 
+// SetAllowLoopbackQueries permits local DNS diagnostics without bypassing external client authorization.
+func (h *Handler) SetAllowLoopbackQueries(enabled bool) {
+	h.allowLoopbackQueries = enabled
+}
+
 func (h *Handler) ServeDNS(
 	w mdns.ResponseWriter,
 	req *mdns.Msg,
@@ -54,7 +60,7 @@ func (h *Handler) ServeDNS(
 
 	// A configured control plane is an allowlist: unauthorized clients must
 	// receive no recursive or managed DNS answers.
-	if h.entitlements != nil && !h.entitlements.Allowed(responseWriterIPv4(w)) {
+	if h.entitlements != nil && !h.entitlements.Allowed(responseWriterIPv4(w)) && !(h.allowLoopbackQueries && isLoopbackDNSClient(w)) {
 		resp := new(mdns.Msg)
 		resp.SetRcode(req, mdns.RcodeRefused)
 		_ = w.WriteMsg(resp)
@@ -70,7 +76,7 @@ func (h *Handler) ServeDNS(
 		return
 	}
 
-	if h.entitlements != nil {
+	if h.entitlements != nil && !(h.allowLoopbackQueries && isLoopbackDNSClient(w)) {
 		entitlement, allowed := h.entitlements.Get(responseWriterIPv4(w))
 		if !allowed {
 			h.serverFailure(w, req)
@@ -306,4 +312,22 @@ func (h *Handler) healthyAgent(id string, leaseType allocation.Type) bool {
 	default:
 		return false
 	}
+}
+
+func isLoopbackDNSClient(w mdns.ResponseWriter) bool {
+	if w == nil || w.RemoteAddr() == nil {
+		return false
+	}
+	switch addr := w.RemoteAddr().(type) {
+	case *net.UDPAddr:
+		return addr.IP.IsLoopback()
+	case *net.TCPAddr:
+		return addr.IP.IsLoopback()
+	}
+	host, _, err := net.SplitHostPort(w.RemoteAddr().String())
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
