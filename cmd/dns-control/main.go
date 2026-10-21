@@ -36,6 +36,7 @@ func main() {
 
 	allocationStore := allocation.NewStore(cfg.Agent.LeaseDuration)
 	agentStore := agentregistry.NewStore()
+	syncStatus := &api.DomainSyncStatus{Enabled: cfg.Backend.Enabled() && cfg.Node.Enabled()}
 
 	var entitlementStore *entitlement.Store
 	if cfg.Backend.Enabled() {
@@ -66,13 +67,14 @@ func main() {
 				Region:    cfg.Node.Region,
 				Addresses: append([]string(nil), cfg.Node.PublicDNS...),
 			}
-			registerDNSControl(registryClient, registration, domainStore, allocationStore)
+			registerDNSControl(registryClient, registration, domainStore, allocationStore, syncStatus)
 			go runDNSControlRegistration(
 				registryClient,
 				registration,
 				cfg.Node.RegisterInterval,
 				domainStore,
 				allocationStore,
+				syncStatus,
 			)
 			log.Printf(
 				"backend DNS registration enabled id=%s region=%s addresses=%v interval=%s",
@@ -102,12 +104,13 @@ func main() {
 	)
 	dnsServer := dns.NewServer(cfg.DNS.Listen, dnsHandler)
 
-	apiHandler := api.NewHandler(
+	apiHandler := api.NewHandlerWithSyncStatus(
 		domainStore,
 		allocationStore,
 		agentStore,
 		entitlementStore,
 		cfg.Agent.Token,
+		syncStatus,
 		resolver,
 	)
 	apiServer := api.NewServer(cfg.API.Listen, apiHandler)
@@ -168,12 +171,13 @@ func runDNSControlRegistration(
 	interval time.Duration,
 	domains *domain.Store,
 	allocations *allocation.Store,
+	status *api.DomainSyncStatus,
 ) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		registerDNSControl(client, registration, domains, allocations)
+		registerDNSControl(client, registration, domains, allocations, status)
 	}
 }
 
@@ -182,15 +186,17 @@ func registerDNSControl(
 	registration backendregistry.RegisterRequest,
 	domains *domain.Store,
 	allocations *allocation.Store,
+	status *api.DomainSyncStatus,
 ) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := client.Register(ctx, registration); err != nil {
 		log.Printf("backend DNS registration failed: %v", err)
+		status.Record(0, 0, err)
 		return
 	}
-	refreshDomainPolicies(client, domains, allocations)
+	refreshDomainPolicies(client, domains, allocations, status)
 }
 
 func runReconciler(
@@ -223,18 +229,21 @@ func runReconciler(
 	}
 }
 
-func refreshDomainPolicies(client *backendregistry.Client, domains *domain.Store, allocations *allocation.Store) {
+func refreshDomainPolicies(client *backendregistry.Client, domains *domain.Store, allocations *allocation.Store, status *api.DomainSyncStatus) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	snapshot, err := client.FetchDomains(ctx)
 	if err != nil {
 		log.Printf("backend domain policy sync failed: %v", err)
+		status.Record(0, 0, err)
 		return
 	}
 	if err := domains.Replace(snapshot.Domains); err != nil {
 		log.Printf("backend domain policy validation failed: %v", err)
+		status.Record(0, 0, err)
 		return
 	}
 	allocations.ReconcilePolicies(snapshot.Domains)
+	status.Record(snapshot.Revision, len(snapshot.Domains), nil)
 	log.Printf("backend domain policies synchronized revision=%d count=%d", snapshot.Revision, len(snapshot.Domains))
 }
