@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"net/url"
 	"time"
 
 	"github.com/wraplink/dns-control/internal/domain"
@@ -25,6 +26,8 @@ type DNSConfig struct {
 	Listen   string   `yaml:"listen"`
 	Upstream []string `yaml:"upstream"`
 	TTL      uint32   `yaml:"ttl"`
+	ParentURL string `yaml:"parent_url"`
+	ParentToken string `yaml:"parent_token"`
 }
 
 type APIConfig struct {
@@ -110,6 +113,15 @@ func (c Config) Validate() error {
 	for i, upstream := range c.DNS.Upstream {
 		if upstream == "" {
 			return fmt.Errorf("dns.upstream[%d] cannot be empty", i)
+		}
+	}
+	if c.DNS.ParentURL != "" {
+		u, err := url.Parse(c.DNS.ParentURL)
+		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return fmt.Errorf("dns.parent_url must be an HTTPS URL without credentials or query")
+		}
+		if len(c.DNS.ParentToken) < 32 {
+			return fmt.Errorf("dns.parent_token must contain at least 32 characters")
 		}
 	}
 	if c.DNS.TTL == 0 {
