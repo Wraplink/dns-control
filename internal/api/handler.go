@@ -8,6 +8,7 @@ import (
 	"github.com/wraplink/dns-control/internal/agentregistry"
 	"github.com/wraplink/dns-control/internal/allocation"
 	"github.com/wraplink/dns-control/internal/domain"
+	"github.com/wraplink/dns-control/internal/dns"
 	"github.com/wraplink/dns-control/internal/entitlement"
 )
 
@@ -17,6 +18,7 @@ type Handler struct {
 	agents       *agentregistry.Store
 	entitlements *entitlement.Store
 	token        string
+	resolver     *dns.Resolver
 }
 
 func NewHandler(
@@ -25,6 +27,7 @@ func NewHandler(
 	agents *agentregistry.Store,
 	entitlements *entitlement.Store,
 	token string,
+	resolvers ...*dns.Resolver,
 ) http.Handler {
 	h := &Handler{
 		domains:      domains,
@@ -34,7 +37,11 @@ func NewHandler(
 		token:        token,
 	}
 
+	if len(resolvers) > 0 {
+		h.resolver = resolvers[0]
+	}
 	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/dns/resolve", h.resolveDNS)
 	mux.HandleFunc("/api/v1/agent/register", h.register)
 	mux.HandleFunc("/api/v1/agent/poll", h.poll)
 	mux.HandleFunc("/api/v1/agent/heartbeat", h.heartbeat)
