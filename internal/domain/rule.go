@@ -7,8 +7,8 @@ import (
 )
 
 type Rule struct {
-	Domain string `yaml:"domain" json:"domain"`
-	Mode   Mode   `yaml:"mode" json:"mode"`
+	Domain     string `yaml:"domain" json:"domain"`
+	Mode       Mode   `yaml:"mode" json:"mode"`
 	SpecificIP string `yaml:"specific_ip,omitempty" json:"specific_ip,omitempty"`
 	// ConnectionModes scopes managed rules per client. Empty means all modes.
 	// Smart always preserves legacy managed DNS policy behavior.
