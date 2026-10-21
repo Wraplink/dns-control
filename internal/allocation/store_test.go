@@ -89,7 +89,7 @@ func TestAuthoritativeRouteAssignmentRequiresMatchingAgentIPAndGeneration(t *tes
 	store := NewStore(time.Minute)
 	store.ReconcilePolicies([]domain.Rule{{
 		Domain: "route.example", Mode: domain.ModeRoute,
-		Route: &domain.RoutePolicy{DestinationIP: "198.51.100.10", Protocol: "tcp_udp"},
+		Route:      &domain.RoutePolicy{DestinationIP: "198.51.100.10", Protocol: "tcp_udp"},
 		Assignment: &domain.RouteAssignment{AgentID: "edge-a", PublicIP: "192.0.2.10", Generation: 7, State: "pending"},
 	}})
 	if got := store.Poll("edge-b", 0, 1); len(got) != 0 {
@@ -121,7 +121,7 @@ func TestRouteWithoutBackendAssignmentFailsClosed(t *testing.T) {
 	store := NewStore(time.Minute)
 	store.ReconcilePolicies([]domain.Rule{{
 		Domain: "route.example", Mode: domain.ModeRoute,
-		Route: &domain.RoutePolicy{DestinationIP: "198.51.100.10", Protocol: "tcp"},
+		Route:  &domain.RoutePolicy{DestinationIP: "198.51.100.10", Protocol: "tcp"},
 	}})
 	if got := store.Poll("edge-a", 0, 1); len(got) != 0 {
 		t.Fatalf("unassigned route was dispatched: %+v", got)
