@@ -13,7 +13,15 @@ type Rule struct {
 	// ConnectionModes scopes managed rules per client. Empty means all modes.
 	// Smart always preserves legacy managed DNS policy behavior.
 	ConnectionModes []string     `yaml:"connection_modes,omitempty" json:"connection_modes,omitempty"`
+	Assignment      *RouteAssignment `yaml:"assignment,omitempty" json:"assignment,omitempty"`
 	Route           *RoutePolicy `yaml:"route,omitempty" json:"route,omitempty"`
+}
+
+type RouteAssignment struct {
+	AgentID string `yaml:"agent_id" json:"agent_id"`
+	PublicIP string `yaml:"public_ip" json:"public_ip"`
+	State string `yaml:"state" json:"state"`
+	Generation int64 `yaml:"generation" json:"generation"`
 }
 
 type RoutePolicy struct {
