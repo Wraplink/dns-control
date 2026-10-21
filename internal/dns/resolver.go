@@ -2,6 +2,7 @@ package dns
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -11,6 +12,20 @@ import (
 
 	mdns "github.com/miekg/dns"
 )
+
+type hopContextKey struct{}
+
+const MaxParentHops = 4
+
+// WithParentHopCount propagates the verified HTTP DNS hop count.
+func WithParentHopCount(ctx context.Context, hops int) context.Context {
+	return context.WithValue(ctx, hopContextKey{}, hops)
+}
+
+func parentHopCount(ctx context.Context) int {
+	hops, _ := ctx.Value(hopContextKey{}).(int)
+	return hops
+}
 
 type Resolver struct {
 	client      *mdns.Client
@@ -37,17 +52,22 @@ func (r *Resolver) SetParent(url, token string) {
 	r.parentToken = token
 }
 
-func (r *Resolver) resolveParent(req *mdns.Msg) (*mdns.Msg, error) {
+func (r *Resolver) resolveParent(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error) {
+	hops := parentHopCount(ctx)
+	if hops >= MaxParentHops {
+		return nil, fmt.Errorf("parent DNS maximum hop count exceeded")
+	}
 	wire, err := req.Pack()
 	if err != nil {
 		return nil, err
 	}
-	request, err := http.NewRequest(http.MethodPost, r.parentURL+"/api/v1/dns/resolve", bytes.NewReader(wire))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, r.parentURL+"/api/v1/dns/resolve", bytes.NewReader(wire))
 	if err != nil {
 		return nil, err
 	}
 	request.Header.Set("Content-Type", "application/dns-message")
 	request.Header.Set("Authorization", "Bearer "+r.parentToken)
+	request.Header.Set("X-Wraplink-DNS-Hop", fmt.Sprint(hops+1))
 	response, err := r.httpClient.Do(request)
 	if err != nil {
 		return nil, err
@@ -71,6 +91,10 @@ func (r *Resolver) resolveParent(req *mdns.Msg) (*mdns.Msg, error) {
 }
 
 func (r *Resolver) Resolve(req *mdns.Msg) (*mdns.Msg, error) {
+	return r.ResolveContext(context.Background(), req)
+}
+
+func (r *Resolver) ResolveContext(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error) {
 	if req == nil {
 		return nil, fmt.Errorf("nil DNS request")
 	}
@@ -102,7 +126,7 @@ func (r *Resolver) Resolve(req *mdns.Msg) (*mdns.Msg, error) {
 	}
 
 	if r.parentURL != "" {
-		response, err := r.resolveParent(req)
+		response, err := r.resolveParent(ctx, req)
 		if err == nil {
 			return response, nil
 		}
