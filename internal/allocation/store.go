@@ -108,7 +108,7 @@ func (s *Store) Poll(agentID string, sniMax, routeMax int) []Lease {
 
 	for _, name := range domains {
 		lease := s.leases[name]
-		if lease.State != StatePending || strings.Contains(name, "#replica#") || (lease.Type == TypeRoute && (lease.Generation <= 0 || lease.AgentID != agentID || net.ParseIP(lease.Address) == nil)) {
+		if lease.State != StatePending || strings.Contains(name, "#replica#") || (lease.Type == TypeRoute && lease.Generation > 0 && (lease.AgentID != agentID || net.ParseIP(lease.Address) == nil)) {
 			continue
 		}
 
