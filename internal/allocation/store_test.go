@@ -186,3 +186,35 @@ func TestRouteFailureRequiresCurrentGeneration(t *testing.T) {
 		t.Fatalf("failed route must be retried with authoritative generation: %+v", got)
 	}
 }
+
+func TestRemovingBackendAssignmentRevokesActiveRoute(t *testing.T) {
+	store := NewStore(time.Minute)
+	rule := domain.Rule{
+		Domain:     "revoked.example",
+		Mode:       domain.ModeRoute,
+		Route:      &domain.RoutePolicy{DestinationIP: "198.51.100.20", Protocol: "tcp"},
+		Assignment: &domain.RouteAssignment{AgentID: "edge-a", PublicIP: "192.0.2.20", Generation: 3},
+	}
+	store.ReconcilePolicies([]domain.Rule{rule})
+	leases := store.Poll("edge-a", 0, 1)
+	if len(leases) != 1 {
+		t.Fatalf("expected route lease, got %+v", leases)
+	}
+	if !store.ActivateWithGeneration(leases[0].ID, "edge-a", "192.0.2.20", "", "route-a", 3) {
+		t.Fatal("current route acknowledgement rejected")
+	}
+	if _, ok := store.Get("revoked.example"); !ok {
+		t.Fatal("expected active route")
+	}
+	rule.Assignment = nil
+	store.ReconcilePolicies([]domain.Rule{rule})
+	if _, ok := store.Get("revoked.example"); ok {
+		t.Fatal("removed backend assignment must stop DNS routing immediately")
+	}
+	if got := store.Heartbeat("edge-a", []string{leases[0].ID}); len(got) != 1 || got[0] != leases[0].ID {
+		t.Fatalf("agent must release revoked route: %+v", got)
+	}
+	if got := store.Poll("edge-a", 0, 1); len(got) != 0 {
+		t.Fatalf("revoked route must not be dispatched: %+v", got)
+	}
+}
