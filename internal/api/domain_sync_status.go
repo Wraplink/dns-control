@@ -9,12 +9,12 @@ import (
 // A successful fetch is not proof of DNS resolution or edge-agent provisioning.
 type DomainSyncStatus struct {
 	mu sync.RWMutex
-	Enabled bool `json:"enabled"`
+	Enabled         bool `json:"enabled"`
 	BackendRevision uint64 `json:"backend_revision"`
-	SyncedDomains int `json:"synced_domains"`
-	LastSuccess *time.Time `json:"last_success,omitempty"`
-	LastAttempt *time.Time `json:"last_attempt,omitempty"`
-	LastError string `json:"last_error,omitempty"`
+	SyncedDomains  int `json:"synced_domains"`
+	LastSuccess    *time.Time `json:"last_success,omitempty"`
+	LastAttempt    *time.Time `json:"last_attempt,omitempty"`
+	LastError      string `json:"last_error,omitempty"`
 }
 
 func (s *DomainSyncStatus) Record(revision uint64, count int, err error) {
@@ -36,12 +36,12 @@ func (s *DomainSyncStatus) Snapshot() map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return map[string]any{
-		"enabled":s.Enabled,
-		"backend_revision":s.BackendRevision,
-		"synced_domains":s.SyncedDomains,
-		"last_success":s.LastSuccess,
-		"last_attempt":s.LastAttempt,
-		"last_error":s.LastError,
-		"healthy":s.Enabled && s.LastSuccess != nil && s.LastError == "",
+		"enabled":          s.Enabled,
+		"backend_revision": s.BackendRevision,
+		"synced_domains":   s.SyncedDomains,
+		"last_success":    s.LastSuccess,
+		"last_attempt":    s.LastAttempt,
+		"last_error":      s.LastError,
+		"healthy":         s.Enabled && s.LastSuccess != nil && s.LastError == "",
 	}
 }
