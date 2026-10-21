@@ -8,12 +8,14 @@ import (
 	mdns "github.com/miekg/dns"
 
 	"github.com/wraplink/dns-control/internal/allocation"
+	"github.com/wraplink/dns-control/internal/agentregistry"
 	"github.com/wraplink/dns-control/internal/domain"
 	"github.com/wraplink/dns-control/internal/entitlement"
 )
 
 type Handler struct {
 	resolver     *Resolver
+	agents       *agentregistry.Store
 	domains      *domain.Store
 	allocations  *allocation.Store
 	entitlements *entitlement.Store
@@ -26,14 +28,17 @@ func NewHandler(
 	allocations *allocation.Store,
 	entitlements *entitlement.Store,
 	ttl uint32,
+	agents ...*agentregistry.Store,
 ) *Handler {
-	return &Handler{
+	h := &Handler{
 		resolver:     resolver,
 		domains:      domains,
 		allocations:  allocations,
 		entitlements: entitlements,
 		ttl:          ttl,
 	}
+	if len(agents) > 0 { h.agents = agents[0] }
+	return h
 }
 
 func (h *Handler) ServeDNS(
@@ -133,6 +138,7 @@ func (h *Handler) handleHijack(
 		return
 	}
 
+	if !h.healthyAgent(allocation.AgentID) { h.serverFailure(w, req); return }
 	ip := net.ParseIP(allocation.Address)
 	if ip == nil || ip.To4() == nil {
 		log.Printf(
@@ -283,4 +289,11 @@ func (h *Handler) handleSpecificIP(w mdns.ResponseWriter, req *mdns.Msg, address
 	resp := new(mdns.Msg)
 	resp.SetReply(req)
 	_ = w.WriteMsg(resp)
+}
+
+// healthyAgent rejects stale or offline allocations when an agent registry is attached.
+func (h *Handler) healthyAgent(id string) bool {
+	if h.agents == nil { return true }
+	agent, ok := h.agents.Get(id)
+	return ok && agent.Status == agentregistry.StatusOnline && agent.Capacity.SNI > 0
 }
