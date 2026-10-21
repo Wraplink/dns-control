@@ -3,6 +3,10 @@ dns:
 
   upstream: [${DNS_UPSTREAM}]
   ttl: 30
+  # Optional parent DNS Control, used when local upstream DNS fails.
+  # Parent must expose /api/v1/dns/resolve over HTTPS.
+  # parent_url: "https://master-dns.example.com"
+  # parent_token: "${PARENT_DNS_CONTROL_TOKEN}"
 
 api:
   listen: ${API_LISTEN}
