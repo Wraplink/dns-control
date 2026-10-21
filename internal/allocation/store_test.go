@@ -135,7 +135,7 @@ func TestAssignmentChangeRevokesOldLeaseAndRejectsStaleAck(t *testing.T) {
 	rule := domain.Rule{
 		Domain:     "change.example",
 		Mode:       domain.ModeRoute,
-		Route: &domain.RoutePolicy{DestinationIP: "198.51.100.10", Protocol: "tcp"},
+		Route:       &domain.RoutePolicy{DestinationIP: "198.51.100.10", Protocol: "tcp"},
 		Assignment: &domain.RouteAssignment{AgentID: "edge-a", PublicIP: "192.0.2.10", Generation: 1},
 	}
 	store.ReconcilePolicies([]domain.Rule{rule})
