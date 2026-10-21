@@ -135,14 +135,20 @@ func (s *Store) Poll(agentID string, sniMax, routeMax int) []Lease {
 		result = append(result, *lease)
 	}
 
-	// After assigning primary work, distribute existing SNI policies to
-	// additional agents. Only one lease per agent/domain is permitted.
+	// Distribute active SNI and route policies to additional agents.
+	// Only one lease per agent/domain is permitted.
 	for _, name := range domains {
-		if sniAssigned >= sniMax {
-			break
-		}
 		primary := s.leases[name]
-		if primary.Type != TypeSNI || primary.State != StateActive {
+		if primary.State != StateActive || strings.Contains(name, "#replica#") {
+			continue
+		}
+		if primary.Type == TypeSNI && sniAssigned >= sniMax {
+			continue
+		}
+		if primary.Type == TypeRoute && routeAssigned >= routeMax {
+			continue
+		}
+		if primary.Type != TypeSNI && primary.Type != TypeRoute {
 			continue
 		}
 		alreadyAssigned := false
@@ -159,13 +165,20 @@ func (s *Store) Poll(agentID string, sniMax, routeMax int) []Lease {
 		key := primary.Domain + "#replica#" + agentID
 		s.revision++
 		replica := &Lease{
-			ID: uuid.NewString(), Domain: primary.Domain, Type: TypeSNI,
-			State: StateAssigned, AgentID: agentID, SNI: primary.Domain,
+			ID: uuid.NewString(), Domain: primary.Domain, Type: primary.Type,
+			State: StateAssigned, AgentID: agentID, SNI: primary.SNI,
+			DestinationIP: primary.DestinationIP, Protocol: primary.Protocol,
+			DestinationPortStart: primary.DestinationPortStart,
+			DestinationPortEnd: primary.DestinationPortEnd,
 			Revision: s.revision, ExpiresAt: now.Add(s.leaseDuration),
 		}
 		s.leases[key] = replica
 		result = append(result, *replica)
-		sniAssigned++
+		if primary.Type == TypeSNI {
+			sniAssigned++
+		} else {
+			routeAssigned++
+		}
 	}
 	return result
 }
