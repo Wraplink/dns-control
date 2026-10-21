@@ -242,7 +242,7 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ok := h.allocations.Activate(req.LeaseID, req.AgentID, req.Address, req.SNI, req.RouteID)
+	ok := h.allocations.ActivateWithGeneration(req.LeaseID, req.AgentID, req.Address, req.SNI, req.RouteID, req.Generation)
 	if !ok {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "lease activation rejected"})
 		return

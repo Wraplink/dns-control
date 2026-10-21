@@ -108,7 +108,7 @@ func (s *Store) Poll(agentID string, sniMax, routeMax int) []Lease {
 
 	for _, name := range domains {
 		lease := s.leases[name]
-		if lease.State != StatePending || strings.Contains(name, "#replica#") {
+		if lease.State != StatePending || strings.Contains(name, "#replica#") || (lease.Type == TypeRoute && lease.Generation > 0 && (lease.AgentID != agentID || net.ParseIP(lease.Address) == nil)) {
 			continue
 		}
 
@@ -208,11 +208,15 @@ func (s *Store) Heartbeat(agentID string, leaseIDs []string) []string {
 }
 
 func (s *Store) Activate(leaseID, agentID, address, sni, routeID string) bool {
+	return s.ActivateWithGeneration(leaseID, agentID, address, sni, routeID, 0)
+}
+
+func (s *Store) ActivateWithGeneration(leaseID, agentID, address, sni, routeID string, generation int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	lease := s.findByIDLocked(strings.TrimSpace(leaseID))
-	if lease == nil || lease.AgentID != strings.TrimSpace(agentID) || lease.State != StateAssigned {
+	if lease == nil || lease.AgentID != strings.TrimSpace(agentID) || lease.State != StateAssigned || (lease.Type == TypeRoute && lease.Generation > 0 && generation != lease.Generation) {
 		return false
 	}
 
@@ -222,6 +226,9 @@ func (s *Store) Activate(leaseID, agentID, address, sni, routeID string) bool {
 		return false
 	}
 
+	if lease.Type == TypeRoute && lease.Generation > 0 && lease.Address != strings.TrimSpace(address) {
+		return false
+	}
 	s.revision++
 	lease.State = StateActive
 	lease.Address = strings.TrimSpace(address)
@@ -400,8 +407,10 @@ func (s *Store) removeOrResetExpiredLocked(lease *Lease) {
 func (s *Store) resetToPendingLocked(lease *Lease) {
 	s.revision++
 	lease.State = StatePending
-	lease.AgentID = ""
-	lease.Address = ""
+	if lease.Type != TypeRoute || lease.Generation == 0 {
+		lease.AgentID = ""
+		lease.Address = ""
+	}
 	lease.SNI = ""
 	lease.RouteID = ""
 	lease.ExpiresAt = time.Time{}
@@ -414,7 +423,7 @@ func (s *Store) resetToPendingLocked(lease *Lease) {
 func (s *Store) ReconcilePolicies(rules []domain.Rule) {
 	desired := make(map[string]domain.Rule, len(rules))
 	for _, rule := range rules {
-		if rule.Mode == domain.ModeHijack || rule.Mode == domain.ModeRoute {
+		if rule.Mode == domain.ModeHijack || (rule.Mode == domain.ModeRoute && rule.Assignment != nil && rule.Assignment.AgentID != "" && rule.Assignment.Generation > 0 && net.ParseIP(rule.Assignment.PublicIP) != nil) {
 			desired[normalize(rule.Domain)] = rule
 		}
 	}
@@ -427,7 +436,8 @@ func (s *Store) ReconcilePolicies(rules []domain.Rule) {
 				rule.Route == nil || lease.DestinationIP != rule.Route.DestinationIP ||
 				lease.Protocol != rule.Route.Protocol ||
 				lease.DestinationPortStart != rule.Route.DestinationPortStart ||
-				lease.DestinationPortEnd != rule.Route.DestinationPortEnd)) {
+				lease.DestinationPortEnd != rule.Route.DestinationPortEnd ||
+				(rule.Assignment != nil && (lease.AgentID != rule.Assignment.AgentID || lease.Address != rule.Assignment.PublicIP || lease.Generation != rule.Assignment.Generation)))) {
 			delete(s.leases, name)
 			s.revision++
 		}
@@ -446,6 +456,11 @@ func (s *Store) ReconcilePolicies(rules []domain.Rule) {
 			lease.Protocol = rule.Route.Protocol
 			lease.DestinationPortStart = rule.Route.DestinationPortStart
 			lease.DestinationPortEnd = rule.Route.DestinationPortEnd
+			if rule.Assignment != nil {
+				lease.AgentID = rule.Assignment.AgentID
+				lease.Address = rule.Assignment.PublicIP
+				lease.Generation = rule.Assignment.Generation
+			}
 		}
 		s.leases[name] = lease
 	}
