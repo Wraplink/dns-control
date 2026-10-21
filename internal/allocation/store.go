@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/wraplink/dns-control/internal/domain"
 )
 
 type Store struct {
@@ -275,4 +277,47 @@ func (s *Store) resetToPendingLocked(lease *Lease) {
 	lease.RouteID = ""
 	lease.ExpiresAt = time.Time{}
 	lease.Revision = s.revision
+}
+
+// ReconcilePolicies removes leases for deleted or changed managed rules and
+// creates pending leases for newly introduced SNI/route policies.
+// Call only after a domain snapshot has passed validation.
+func (s *Store) ReconcilePolicies(rules []domain.Rule) {
+	desired := make(map[string]domain.Rule, len(rules))
+	for _, rule := range rules {
+		if rule.Mode == domain.ModeHijack || rule.Mode == domain.ModeRoute {
+			desired[normalize(rule.Domain)] = rule
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for name, lease := range s.leases {
+		rule, ok := desired[name]
+		if !ok || (rule.Mode == domain.ModeHijack && lease.Type != TypeSNI) ||
+			(rule.Mode == domain.ModeRoute && (lease.Type != TypeRoute ||
+				rule.Route == nil || lease.DestinationIP != rule.Route.DestinationIP ||
+				lease.Protocol != rule.Route.Protocol ||
+				lease.DestinationPortStart != rule.Route.DestinationPortStart ||
+				lease.DestinationPortEnd != rule.Route.DestinationPortEnd)) {
+			delete(s.leases, name)
+			s.revision++
+		}
+	}
+	for name, rule := range desired {
+		if _, ok := s.leases[name]; ok {
+			continue
+		}
+		s.revision++
+		lease := &Lease{ID: uuid.NewString(), Domain: name, State: StatePending, Revision: s.revision}
+		if rule.Mode == domain.ModeHijack {
+			lease.Type = TypeSNI
+		} else {
+			lease.Type = TypeRoute
+			lease.DestinationIP = rule.Route.DestinationIP
+			lease.Protocol = rule.Route.Protocol
+			lease.DestinationPortStart = rule.Route.DestinationPortStart
+			lease.DestinationPortEnd = rule.Route.DestinationPortEnd
+		}
+		s.leases[name] = lease
+	}
 }
