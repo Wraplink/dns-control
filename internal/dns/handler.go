@@ -14,11 +14,11 @@ import (
 )
 
 type Handler struct {
-	resolver     *Resolver
-	agents       *agentregistry.Store
-	domains      *domain.Store
-	allocations  *allocation.Store
-	entitlements *entitlement.Store
+	resolver             *Resolver
+	agents               *agentregistry.Store
+	domains              *domain.Store
+	allocations          *allocation.Store
+	entitlements         *entitlement.Store
 	ttl                  uint32
 	allowLoopbackQueries bool
 }
