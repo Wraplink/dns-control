@@ -49,10 +49,10 @@ type ReportRequest struct {
 
 	Success bool `json:"success"`
 
-	Address string `json:"address,omitempty"`
-	SNI     string `json:"sni,omitempty"`
-	RouteID string `json:"route_id,omitempty"`
-	Generation int64 `json:"generation,omitempty"`
+	Address    string `json:"address,omitempty"`
+	SNI        string `json:"sni,omitempty"`
+	RouteID    string `json:"route_id,omitempty"`
+	Generation int64  `json:"generation,omitempty"`
 }
 
 type ReportResponse struct {
