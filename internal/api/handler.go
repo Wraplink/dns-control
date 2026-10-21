@@ -19,7 +19,7 @@ type Handler struct {
 	entitlements *entitlement.Store
 	token        string
 	resolver     *dns.Resolver
-	syncStatus *DomainSyncStatus
+	syncStatus   *DomainSyncStatus
 }
 
 func NewHandler(
@@ -44,7 +44,7 @@ func newHandler(domains *domain.Store, allocations *allocation.Store, agents *ag
 		agents:       agents,
 		entitlements: entitlements,
 		token:        token,
-		syncStatus: status,
+		syncStatus:   status,
 	}
 
 	if len(resolvers) > 0 {
@@ -297,7 +297,7 @@ func (h *Handler) domainSyncStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.syncStatus == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error":"sync status unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "sync status unavailable"})
 		return
 	}
 	writeJSON(w, http.StatusOK, h.syncStatus.Snapshot())

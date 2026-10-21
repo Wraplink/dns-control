@@ -9,12 +9,12 @@ import (
 // A successful fetch is not proof of DNS resolution or edge-agent provisioning.
 type DomainSyncStatus struct {
 	mu              sync.RWMutex
-	Enabled         bool `json:"enabled"`
-	BackendRevision uint64 `json:"backend_revision"`
-	SyncedDomains   int `json:"synced_domains"`
+	Enabled         bool       `json:"enabled"`
+	BackendRevision uint64     `json:"backend_revision"`
+	SyncedDomains   int        `json:"synced_domains"`
 	LastSuccess     *time.Time `json:"last_success,omitempty"`
 	LastAttempt     *time.Time `json:"last_attempt,omitempty"`
-	LastError       string `json:"last_error,omitempty"`
+	LastError       string     `json:"last_error,omitempty"`
 }
 
 func (s *DomainSyncStatus) Record(revision uint64, count int, err error) {
