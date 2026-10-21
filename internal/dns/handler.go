@@ -7,8 +7,8 @@ import (
 
 	mdns "github.com/miekg/dns"
 
-	"github.com/wraplink/dns-control/internal/allocation"
 	"github.com/wraplink/dns-control/internal/agentregistry"
+	"github.com/wraplink/dns-control/internal/allocation"
 	"github.com/wraplink/dns-control/internal/domain"
 	"github.com/wraplink/dns-control/internal/entitlement"
 )
@@ -37,7 +37,9 @@ func NewHandler(
 		entitlements: entitlements,
 		ttl:          ttl,
 	}
-	if len(agents) > 0 { h.agents = agents[0] }
+	if len(agents) > 0 {
+		h.agents = agents[0]
+	}
 	return h
 }
 

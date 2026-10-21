@@ -1,8 +1,8 @@
 package allocation
 
 import (
-	"sort"
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +20,7 @@ type Store struct {
 	revision uint64
 
 	leaseDuration time.Duration
-	roundRobin map[string]uint64
+	roundRobin    map[string]uint64
 }
 
 func NewStore(leaseDuration ...time.Duration) *Store {
@@ -31,7 +31,7 @@ func NewStore(leaseDuration ...time.Duration) *Store {
 
 	return &Store{
 		leases:        make(map[string]*Lease),
-		roundRobin: make(map[string]uint64),
+		roundRobin:    make(map[string]uint64),
 		leaseDuration: duration,
 	}
 }
@@ -247,7 +247,6 @@ func (s *Store) Fail(leaseID, agentID string) bool {
 	s.removeOrResetExpiredLocked(lease)
 	return true
 }
-
 
 // ActiveCandidates returns a stable ordered snapshot of all non-expired active
 // allocations for a domain. It supports multi-agent leases without exposing
