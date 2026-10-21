@@ -82,6 +82,8 @@ func (h *Handler) ServeDNS(
 		h.handleHijack(w, req, rule.Domain)
 	case domain.ModeRoute:
 		h.handleRoute(w, req, rule.Domain)
+	case domain.ModeSpecificIP:
+		h.handleSpecificIP(w, req, rule.SpecificIP)
 	default:
 		log.Printf(
 			"dns: unsupported mode=%q domain=%q",
@@ -121,7 +123,7 @@ func (h *Handler) handleHijack(
 	allocation, ok := h.allocations.Get(domainName)
 	if !ok {
 		log.Printf("dns: no SNI allocation for %q", domainName)
-		h.handleNormal(w, req)
+		h.serverFailure(w, req)
 		return
 	}
 
@@ -132,7 +134,7 @@ func (h *Handler) handleHijack(
 			domainName,
 			allocation.Address,
 		)
-		h.handleNormal(w, req)
+		h.serverFailure(w, req)
 		return
 	}
 
@@ -240,4 +242,36 @@ func normalizeDomain(value string) string {
 	value = strings.TrimSpace(value)
 	value = strings.TrimSuffix(value, ".")
 	return strings.ToLower(value)
+}
+
+func (h *Handler) handleSpecificIP(w mdns.ResponseWriter, req *mdns.Msg, address string) {
+	ip := net.ParseIP(address)
+	if ip == nil {
+		h.serverFailure(w, req)
+		return
+	}
+	q := req.Question[0]
+	switch q.Qtype {
+	case mdns.TypeA:
+		if v4 := ip.To4(); v4 != nil {
+			h.writeAddressResponse(w, req, v4)
+			return
+		}
+	case mdns.TypeAAAA:
+		if ip.To4() == nil {
+			resp := new(mdns.Msg)
+			resp.SetReply(req)
+			resp.Answer = []mdns.RR{&mdns.AAAA{Hdr: mdns.RR_Header{
+				Name: q.Name, Rrtype: mdns.TypeAAAA, Class: mdns.ClassINET, Ttl: h.ttl,
+			}, AAAA: ip.To16()}}
+			_ = w.WriteMsg(resp)
+			return
+		}
+	default:
+		h.handleNormal(w, req)
+		return
+	}
+	resp := new(mdns.Msg)
+	resp.SetReply(req)
+	_ = w.WriteMsg(resp)
 }
