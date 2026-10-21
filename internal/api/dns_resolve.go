@@ -3,6 +3,9 @@ package api
 import (
 	"io"
 	"net/http"
+	"strconv"
+
+	"github.com/wraplink/dns-control/internal/dns"
 
 	mdns "github.com/miekg/dns"
 )
@@ -12,6 +15,19 @@ import (
 func (h *Handler) resolveDNS(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	hops := 0
+	if raw := r.Header.Get("X-Wraplink-DNS-Hop"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 0 || value > dns.MaxParentHops {
+			http.Error(w, "invalid DNS hop count", http.StatusBadRequest)
+			return
+		}
+		hops = value
+	}
+	if hops >= dns.MaxParentHops {
+		http.Error(w, "DNS hop limit exceeded", http.StatusLoopDetected)
 		return
 	}
 	if h.resolver == nil {
@@ -32,7 +48,7 @@ func (h *Handler) resolveDNS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid DNS question", http.StatusBadRequest)
 		return
 	}
-	response, err := h.resolver.Resolve(&query)
+	response, err := h.resolver.ResolveContext(dns.WithParentHopCount(r.Context(), hops), &query)
 	if err != nil {
 		http.Error(w, "upstream DNS resolution failed", http.StatusBadGateway)
 		return
