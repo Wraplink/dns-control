@@ -96,10 +96,10 @@ func (r Rule) Validate() error {
 	}
 
 	switch r.Route.Protocol {
-	case "tcp", "udp":
+	case "tcp", "udp", "tcp_udp":
 	default:
 		return fmt.Errorf(
-			"route protocol must be tcp or udp for domain %q",
+			"route protocol must be tcp, udp, or tcp_udp for domain %q",
 			r.Domain,
 		)
 	}
