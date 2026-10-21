@@ -56,6 +56,9 @@ func main() {
 	if cfg.Backend.Enabled() {
 		entitlementStore = entitlement.NewStore(cfg.Backend.EntitlementMaxStale)
 		backendClient := entitlement.NewClient(cfg.Backend.URL, cfg.Backend.ControlKey)
+		policyClient := domain.NewClient(cfg.Backend.URL, cfg.Backend.ControlKey)
+		refreshDomainPolicies(policyClient, domainStore, allocationStore)
+		go runDomainPolicySync(policyClient, domainStore, allocationStore, cfg.Backend.EntitlementRefreshInterval)
 
 		refreshEntitlements(backendClient, entitlementStore)
 		go runEntitlementSync(
@@ -227,4 +230,20 @@ func runReconciler(
 	for range ticker.C {
 		reconcile()
 	}
+}
+
+func runDomainPolicySync(client *domain.Client, domains *domain.Store, allocations *allocation.Store, interval time.Duration) {
+ ticker := time.NewTicker(interval)
+ defer ticker.Stop()
+ for range ticker.C {refreshDomainPolicies(client,domains,allocations)}
+}
+
+func refreshDomainPolicies(client *domain.Client, domains *domain.Store, allocations *allocation.Store) {
+ ctx,cancel:=context.WithTimeout(context.Background(),10*time.Second)
+ defer cancel()
+ snapshot,err:=client.Fetch(ctx)
+ if err!=nil {log.Printf("backend domain policy sync failed: %v",err);return}
+ if err:=domains.Replace(snapshot.Domains);err!=nil {log.Printf("backend domain policy validation failed: %v",err);return}
+ allocations.ReconcilePolicies(snapshot.Domains)
+ log.Printf("backend domain policies synchronized revision=%d count=%d",snapshot.Revision,len(snapshot.Domains))
 }
