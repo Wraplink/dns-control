@@ -240,11 +240,15 @@ func (s *Store) ActivateWithGeneration(leaseID, agentID, address, sni, routeID s
 }
 
 func (s *Store) Fail(leaseID, agentID string) bool {
+	return s.FailWithGeneration(leaseID, agentID, 0)
+}
+
+func (s *Store) FailWithGeneration(leaseID, agentID string, generation int64) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	lease := s.findByIDLocked(strings.TrimSpace(leaseID))
-	if lease == nil || lease.AgentID != strings.TrimSpace(agentID) {
+	if lease == nil || lease.AgentID != strings.TrimSpace(agentID) || (lease.Type == TypeRoute && lease.Generation > 0 && generation != lease.Generation) {
 		return false
 	}
 	if lease.State != StateAssigned && lease.State != StateActive {
