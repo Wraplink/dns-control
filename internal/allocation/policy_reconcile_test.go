@@ -19,7 +19,7 @@ func TestReconcilePoliciesReleasesStaleLeases(t *testing.T) {
 	}
 	store.ReconcilePolicies([]domain.Rule{{Domain: "old.example", Mode: domain.ModeRoute, Route: &domain.RoutePolicy{
 		DestinationIP: "192.0.2.4", Protocol: "tcp",
-	}}})
+	}, Assignment: &domain.RouteAssignment{AgentID: "edge-a", PublicIP: "192.0.2.10", Generation: 1}}})
 	leases := store.List()
 	if len(leases) != 1 || leases[0].ID == oldID || leases[0].Type != TypeRoute {
 		t.Fatalf("changed policy must replace lease: %+v", leases)
