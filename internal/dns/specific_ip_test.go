@@ -13,8 +13,8 @@ import (
 func TestSpecificIPDNSAnswers(t *testing.T) {
 	for _, tc := range []struct {
 		address string
-		qtype uint16
-		want string
+		qtype   uint16
+		want    string
 	}{
 		{"192.0.2.50", mdns.TypeA, "192.0.2.50"},
 		{"2001:db8::50", mdns.TypeAAAA, "2001:db8::50"},
