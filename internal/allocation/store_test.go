@@ -159,3 +159,30 @@ func TestAssignmentChangeRevokesOldLeaseAndRejectsStaleAck(t *testing.T) {
 		t.Fatalf("expected reassigned generation 2, got %+v", next)
 	}
 }
+
+func TestRouteFailureRequiresCurrentGeneration(t *testing.T) {
+	store := NewStore(time.Minute)
+	store.ReconcilePolicies([]domain.Rule{{
+		Domain:     "failure.example",
+		Mode:       domain.ModeRoute,
+		Route:      &domain.RoutePolicy{DestinationIP: "198.51.100.12", Protocol: "udp"},
+		Assignment: &domain.RouteAssignment{AgentID: "edge-a", PublicIP: "192.0.2.12", Generation: 9},
+	}})
+	leases := store.Poll("edge-a", 0, 1)
+	if len(leases) != 1 {
+		t.Fatalf("expected one assigned route, got %+v", leases)
+	}
+	id := leases[0].ID
+	if store.FailWithGeneration(id, "edge-a", 8) || store.FailWithGeneration(id, "edge-a", 0) {
+		t.Fatal("stale or missing generation must not reset route")
+	}
+	if got := store.List(); len(got) != 1 || got[0].State != StateAssigned {
+		t.Fatalf("stale report changed lease state: %+v", got)
+	}
+	if !store.FailWithGeneration(id, "edge-a", 9) {
+		t.Fatal("current generation failure must be accepted")
+	}
+	if got := store.Poll("edge-a", 0, 1); len(got) != 1 || got[0].Generation != 9 {
+		t.Fatalf("failed route must be retried with authoritative generation: %+v", got)
+	}
+}
