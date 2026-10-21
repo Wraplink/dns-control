@@ -158,3 +158,20 @@ func TestSpecificIPRule(t *testing.T) {
 		}
 	}
 }
+
+func TestRouteRuleAcceptsCombinedTCPUDP(t *testing.T) {
+	rule := Rule{
+		Domain: " Game.Example. ",
+		Mode:   ModeRoute,
+		Route: &RoutePolicy{
+			DestinationIP: "192.0.2.20",
+			Protocol:      " TCP_UDP ",
+		},
+	}.Normalize()
+	if rule.Route.Protocol != "tcp_udp" {
+		t.Fatalf("unexpected protocol %q", rule.Route.Protocol)
+	}
+	if err := rule.Validate(); err != nil {
+		t.Fatalf("combined protocol should be accepted: %v", err)
+	}
+}
