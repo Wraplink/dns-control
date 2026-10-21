@@ -19,7 +19,7 @@ type Handler struct {
 	domains      *domain.Store
 	allocations  *allocation.Store
 	entitlements *entitlement.Store
-	ttl          uint32
+	ttl                  uint32
 	allowLoopbackQueries bool
 }
 
