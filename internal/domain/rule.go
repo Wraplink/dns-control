@@ -9,6 +9,7 @@ import (
 type Rule struct {
 	Domain string `yaml:"domain" json:"domain"`
 	Mode   Mode   `yaml:"mode" json:"mode"`
+	SpecificIP string `yaml:"specific_ip,omitempty" json:"specific_ip,omitempty"`
 	// ConnectionModes scopes managed rules per client. Empty means all modes.
 	// Smart always preserves legacy managed DNS policy behavior.
 	ConnectionModes []string     `yaml:"connection_modes,omitempty" json:"connection_modes,omitempty"`
@@ -24,6 +25,7 @@ type RoutePolicy struct {
 
 func (r Rule) Normalize() Rule {
 	r.Domain = normalizeDomain(r.Domain)
+	r.SpecificIP = strings.TrimSpace(r.SpecificIP)
 	for i, mode := range r.ConnectionModes {
 		r.ConnectionModes[i] = strings.ToLower(strings.TrimSpace(mode))
 	}
@@ -57,6 +59,18 @@ func (r Rule) Validate() error {
 		}
 	}
 
+	if r.Mode == ModeSpecificIP {
+		if net.ParseIP(r.SpecificIP) == nil {
+			return fmt.Errorf("specific_ip must be a valid IP address for domain %q", r.Domain)
+		}
+		if r.Route != nil {
+			return fmt.Errorf("route policy is not valid for specific_ip domain %q", r.Domain)
+		}
+		return nil
+	}
+	if r.SpecificIP != "" {
+		return fmt.Errorf("specific_ip is only valid for specific_ip mode domain %q", r.Domain)
+	}
 	if r.Mode != ModeRoute {
 		if r.Route != nil {
 			return fmt.Errorf(
