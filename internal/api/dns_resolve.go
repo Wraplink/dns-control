@@ -26,7 +26,7 @@ func (h *Handler) resolveDNS(w http.ResponseWriter, r *http.Request) {
 		}
 		hops = value
 	}
-		if h.resolver == nil {
+	if h.resolver == nil {
 		http.Error(w, "resolver unavailable", http.StatusServiceUnavailable)
 		return
 	}
