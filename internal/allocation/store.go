@@ -165,7 +165,7 @@ func (s *Store) Heartbeat(agentID string, leaseIDs []string) []string {
 		}
 
 		if !lease.ExpiresAt.IsZero() && !lease.ExpiresAt.After(now) {
-			s.resetToPendingLocked(lease)
+			s.removeOrResetExpiredLocked(lease)
 			release = append(release, id)
 			continue
 		}
@@ -186,7 +186,7 @@ func (s *Store) Activate(leaseID, agentID, address, sni, routeID string) bool {
 
 	now := time.Now().UTC()
 	if !lease.ExpiresAt.IsZero() && !lease.ExpiresAt.After(now) {
-		s.resetToPendingLocked(lease)
+		s.removeOrResetExpiredLocked(lease)
 		return false
 	}
 
@@ -212,7 +212,7 @@ func (s *Store) Fail(leaseID, agentID string) bool {
 		return false
 	}
 
-	s.resetToPendingLocked(lease)
+	s.removeOrResetExpiredLocked(lease)
 	return true
 }
 
@@ -353,6 +353,17 @@ func (s *Store) reclaimExpiredLocked(now time.Time) int {
 		changed++
 	}
 	return changed
+}
+
+func (s *Store) removeOrResetExpiredLocked(lease *Lease) {
+	for key, candidate := range s.leases {
+		if candidate == lease && strings.Contains(key, "#replica#") {
+			delete(s.leases, key)
+			s.revision++
+			return
+		}
+	}
+	s.resetToPendingLocked(lease)
 }
 
 func (s *Store) resetToPendingLocked(lease *Lease) {
