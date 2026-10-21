@@ -26,11 +26,7 @@ func (h *Handler) resolveDNS(w http.ResponseWriter, r *http.Request) {
 		}
 		hops = value
 	}
-	if hops >= dns.MaxParentHops {
-		http.Error(w, "DNS hop limit exceeded", http.StatusLoopDetected)
-		return
-	}
-	if h.resolver == nil {
+		if h.resolver == nil {
 		http.Error(w, "resolver unavailable", http.StatusServiceUnavailable)
 		return
 	}
