@@ -3,9 +3,9 @@ package domain
 type Mode string
 
 const (
-	ModeHijack Mode = "hijack"
-	ModeRoute  Mode = "route"
-	ModeNormal Mode = "normal"
+	ModeHijack     Mode = "hijack"
+	ModeRoute      Mode = "route"
+	ModeNormal     Mode = "normal"
 	ModeSpecificIP Mode = "specific_ip"
 )
 
