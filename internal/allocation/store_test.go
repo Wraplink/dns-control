@@ -88,7 +88,8 @@ func TestFailureReturnsLeaseToScheduler(t *testing.T) {
 func TestAuthoritativeRouteAssignmentRequiresMatchingAgentIPAndGeneration(t *testing.T) {
 	store := NewStore(time.Minute)
 	store.ReconcilePolicies([]domain.Rule{{
-		Domain: "route.example", Mode: domain.ModeRoute,
+		Domain:     "route.example",
+		Mode:       domain.ModeRoute,
 		Route:      &domain.RoutePolicy{DestinationIP: "198.51.100.10", Protocol: "tcp_udp"},
 		Assignment: &domain.RouteAssignment{AgentID: "edge-a", PublicIP: "192.0.2.10", Generation: 7, State: "pending"},
 	}})
@@ -120,7 +121,8 @@ func TestAuthoritativeRouteAssignmentRequiresMatchingAgentIPAndGeneration(t *tes
 func TestRouteWithoutBackendAssignmentFailsClosed(t *testing.T) {
 	store := NewStore(time.Minute)
 	store.ReconcilePolicies([]domain.Rule{{
-		Domain: "route.example", Mode: domain.ModeRoute,
+		Domain: "route.example",
+		Mode:   domain.ModeRoute,
 		Route:  &domain.RoutePolicy{DestinationIP: "198.51.100.10", Protocol: "tcp"},
 	}})
 	if got := store.Poll("edge-a", 0, 1); len(got) != 0 {
