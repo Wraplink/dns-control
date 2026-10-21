@@ -138,7 +138,10 @@ func (h *Handler) handleHijack(
 		return
 	}
 
-	if !h.healthyAgent(allocation.AgentID) { h.serverFailure(w, req); return }
+	if !h.healthyAgent(allocation.AgentID, allocation.Type) {
+		h.serverFailure(w, req)
+		return
+	}
 	ip := net.ParseIP(allocation.Address)
 	if ip == nil || ip.To4() == nil {
 		log.Printf(
@@ -170,6 +173,10 @@ func (h *Handler) handleRoute(
 		return
 	}
 
+	if !h.healthyAgent(allocation.AgentID, allocation.Type) {
+		h.serverFailure(w, req)
+		return
+	}
 	ip := net.ParseIP(allocation.Address)
 	if ip == nil || ip.To4() == nil {
 		log.Printf(
@@ -292,8 +299,20 @@ func (h *Handler) handleSpecificIP(w mdns.ResponseWriter, req *mdns.Msg, address
 }
 
 // healthyAgent rejects stale or offline allocations when an agent registry is attached.
-func (h *Handler) healthyAgent(id string) bool {
-	if h.agents == nil { return true }
+func (h *Handler) healthyAgent(id string, leaseType allocation.Type) bool {
+	if h.agents == nil {
+		return true
+	}
 	agent, ok := h.agents.Get(id)
-	return ok && agent.Status == agentregistry.StatusOnline && agent.Capacity.SNI > 0
+	if !ok || agent.Status != agentregistry.StatusOnline {
+		return false
+	}
+	switch leaseType {
+	case allocation.TypeSNI:
+		return agent.Capacity.SNI > 0
+	case allocation.TypeRoute:
+		return agent.Capacity.Route > 0
+	default:
+		return false
+	}
 }
