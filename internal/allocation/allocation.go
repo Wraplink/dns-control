@@ -36,6 +36,8 @@ type Lease struct {
 	// Route dataplane
 	RouteID string `json:"route_id,omitempty"`
 
+	Generation int64 `json:"generation,omitempty"`
+
 	DestinationIP string `json:"destination_ip,omitempty"`
 	Protocol      string `json:"protocol,omitempty"`
 
