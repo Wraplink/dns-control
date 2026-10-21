@@ -20,11 +20,12 @@ type Config struct {
 }
 
 type DNSConfig struct {
-	Listen      string   `yaml:"listen"`
-	Upstream    []string `yaml:"upstream"`
-	TTL         uint32   `yaml:"ttl"`
-	ParentURL   string   `yaml:"parent_url"`
-	ParentToken string   `yaml:"parent_token"`
+	Listen               string   `yaml:"listen"`
+	Upstream             []string `yaml:"upstream"`
+	TTL                  uint32   `yaml:"ttl"`
+	AllowLoopbackQueries bool     `yaml:"allow_loopback_queries"`
+	ParentURL            string   `yaml:"parent_url"`
+	ParentToken          string   `yaml:"parent_token"`
 }
 
 type APIConfig struct {
