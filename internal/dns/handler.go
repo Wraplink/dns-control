@@ -262,7 +262,10 @@ func (h *Handler) handleSpecificIP(w mdns.ResponseWriter, req *mdns.Msg, address
 			resp := new(mdns.Msg)
 			resp.SetReply(req)
 			resp.Answer = []mdns.RR{&mdns.AAAA{Hdr: mdns.RR_Header{
-				Name: q.Name, Rrtype: mdns.TypeAAAA, Class: mdns.ClassINET, Ttl: h.ttl,
+				Name:   q.Name,
+				Rrtype: mdns.TypeAAAA,
+				Class:  mdns.ClassINET,
+				Ttl:    h.ttl,
 			}, AAAA: ip.To16()}}
 			_ = w.WriteMsg(resp)
 			return
