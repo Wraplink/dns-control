@@ -116,6 +116,12 @@ func (h *Handler) handleHijack(
 	domainName string,
 ) {
 	if req.Question[0].Qtype != mdns.TypeA {
+		if req.Question[0].Qtype == mdns.TypeAAAA {
+			resp := new(mdns.Msg)
+			resp.SetReply(req)
+			_ = w.WriteMsg(resp)
+			return
+		}
 		h.handleNormal(w, req)
 		return
 	}
@@ -154,7 +160,7 @@ func (h *Handler) handleRoute(
 	allocation, ok := h.allocations.Get(domainName)
 	if !ok {
 		log.Printf("dns: no ROUTE allocation for %q", domainName)
-		h.handleNormal(w, req)
+		h.serverFailure(w, req)
 		return
 	}
 
@@ -165,7 +171,7 @@ func (h *Handler) handleRoute(
 			domainName,
 			allocation.Address,
 		)
-		h.handleNormal(w, req)
+		h.serverFailure(w, req)
 		return
 	}
 
