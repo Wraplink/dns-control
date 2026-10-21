@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wraplink/dns-control/internal/domain"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,8 +17,6 @@ type Config struct {
 	Agent   AgentConfig   `yaml:"agent"`
 	Backend BackendConfig `yaml:"backend"`
 	Node    NodeConfig    `yaml:"node"`
-
-	Domains []domain.Rule `yaml:"domains"`
 }
 
 type DNSConfig struct {

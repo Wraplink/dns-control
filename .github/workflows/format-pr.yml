@@ -1,0 +1,26 @@
+name: Format PR Go files
+on:
+  push:
+    branches: [fix/backend-only-domain-config]
+permissions:
+  contents: write
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Apply gofmt
+        run: |
+          gofmt -w internal/allocation/store.go internal/allocation/replica_poll_test.go internal/allocation/round_robin_test.go internal/backendregistry/domains.go internal/dns/agent_health_test.go internal/dns/handler.go
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add internal/
+            git commit -m "style: gofmt PR Go files"
+            git push
+          fi

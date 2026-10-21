@@ -7,6 +7,7 @@ import (
 
 	mdns "github.com/miekg/dns"
 
+	"github.com/wraplink/dns-control/internal/agentregistry"
 	"github.com/wraplink/dns-control/internal/allocation"
 	"github.com/wraplink/dns-control/internal/domain"
 	"github.com/wraplink/dns-control/internal/entitlement"
@@ -14,6 +15,7 @@ import (
 
 type Handler struct {
 	resolver     *Resolver
+	agents       *agentregistry.Store
 	domains      *domain.Store
 	allocations  *allocation.Store
 	entitlements *entitlement.Store
@@ -26,14 +28,19 @@ func NewHandler(
 	allocations *allocation.Store,
 	entitlements *entitlement.Store,
 	ttl uint32,
+	agents ...*agentregistry.Store,
 ) *Handler {
-	return &Handler{
+	h := &Handler{
 		resolver:     resolver,
 		domains:      domains,
 		allocations:  allocations,
 		entitlements: entitlements,
 		ttl:          ttl,
 	}
+	if len(agents) > 0 {
+		h.agents = agents[0]
+	}
+	return h
 }
 
 func (h *Handler) ServeDNS(
@@ -126,24 +133,17 @@ func (h *Handler) handleHijack(
 		return
 	}
 
-	allocation, ok := h.allocations.Get(domainName)
+	selected, ok := h.allocations.NextCandidate(domainName, func(lease allocation.Lease) bool {
+		ip := net.ParseIP(lease.Address)
+		return lease.Type == allocation.TypeSNI && h.healthyAgent(lease.AgentID, lease.Type) &&
+			ip != nil && ip.To4() != nil
+	})
 	if !ok {
-		log.Printf("dns: no SNI allocation for %q", domainName)
+		log.Printf("dns: no healthy SNI allocation for %q", domainName)
 		h.serverFailure(w, req)
 		return
 	}
-
-	ip := net.ParseIP(allocation.Address)
-	if ip == nil || ip.To4() == nil {
-		log.Printf(
-			"dns: invalid SNI allocation address domain=%q address=%q",
-			domainName,
-			allocation.Address,
-		)
-		h.serverFailure(w, req)
-		return
-	}
-
+	ip := net.ParseIP(selected.Address)
 	h.writeAddressResponse(w, req, ip.To4())
 }
 
@@ -164,6 +164,10 @@ func (h *Handler) handleRoute(
 		return
 	}
 
+	if !h.healthyAgent(allocation.AgentID, allocation.Type) {
+		h.serverFailure(w, req)
+		return
+	}
 	ip := net.ParseIP(allocation.Address)
 	if ip == nil || ip.To4() == nil {
 		log.Printf(
@@ -283,4 +287,23 @@ func (h *Handler) handleSpecificIP(w mdns.ResponseWriter, req *mdns.Msg, address
 	resp := new(mdns.Msg)
 	resp.SetReply(req)
 	_ = w.WriteMsg(resp)
+}
+
+// healthyAgent rejects stale or offline allocations when an agent registry is attached.
+func (h *Handler) healthyAgent(id string, leaseType allocation.Type) bool {
+	if h.agents == nil {
+		return true
+	}
+	agent, ok := h.agents.Get(id)
+	if !ok || agent.Status != agentregistry.StatusOnline {
+		return false
+	}
+	switch leaseType {
+	case allocation.TypeSNI:
+		return agent.Capacity.SNI > 0
+	case allocation.TypeRoute:
+		return agent.Capacity.Route > 0
+	default:
+		return false
+	}
 }

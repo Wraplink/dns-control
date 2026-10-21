@@ -29,7 +29,7 @@ func main() {
 	log.Printf("dns: listen %s upstream=%v ttl=%d", cfg.DNS.Listen, cfg.DNS.Upstream, cfg.DNS.TTL)
 	log.Printf("api: listen %s", cfg.API.Listen)
 
-	domainStore, err := domain.NewStore(cfg.Domains)
+	domainStore, err := domain.NewStore(nil)
 	if err != nil {
 		log.Fatalf("create domain store: %v", err)
 	}
@@ -37,28 +37,10 @@ func main() {
 	allocationStore := allocation.NewStore(cfg.Agent.LeaseDuration)
 	agentStore := agentregistry.NewStore()
 
-	for _, rule := range domainStore.List() {
-		switch rule.Mode {
-		case domain.ModeHijack:
-			allocationStore.EnsurePending(rule.Domain, allocation.TypeSNI)
-		case domain.ModeRoute:
-			allocationStore.EnsureRoutePending(
-				rule.Domain,
-				rule.Route.DestinationIP,
-				rule.Route.Protocol,
-				rule.Route.DestinationPortStart,
-				rule.Route.DestinationPortEnd,
-			)
-		}
-	}
-
 	var entitlementStore *entitlement.Store
 	if cfg.Backend.Enabled() {
 		entitlementStore = entitlement.NewStore(cfg.Backend.EntitlementMaxStale)
 		backendClient := entitlement.NewClient(cfg.Backend.URL, cfg.Backend.ControlKey)
-		policyClient := domain.NewClient(cfg.Backend.URL, cfg.Backend.ControlKey)
-		refreshDomainPolicies(policyClient, domainStore, allocationStore)
-		go runDomainPolicySync(policyClient, domainStore, allocationStore, cfg.Backend.EntitlementRefreshInterval)
 
 		refreshEntitlements(backendClient, entitlementStore)
 		go runEntitlementSync(
@@ -84,14 +66,14 @@ func main() {
 				Region:    cfg.Node.Region,
 				Addresses: append([]string(nil), cfg.Node.PublicDNS...),
 			}
-			registerDNSControl(registryClient, registration)
-			refreshDomainPolicies(registryClient, domainStore, allocationStore)
+			registerDNSControl(registryClient, registration, domainStore, allocationStore)
 			go runDNSControlRegistration(
 				registryClient,
 				registration,
 				cfg.Node.RegisterInterval,
+				domainStore,
+				allocationStore,
 			)
-			go runDomainPolicySync(registryClient, domainStore, allocationStore, cfg.Node.RegisterInterval)
 			log.Printf(
 				"backend DNS registration enabled id=%s region=%s addresses=%v interval=%s",
 				cfg.Node.ID,
@@ -116,6 +98,7 @@ func main() {
 		allocationStore,
 		entitlementStore,
 		cfg.DNS.TTL,
+		agentStore,
 	)
 	dnsServer := dns.NewServer(cfg.DNS.Listen, dnsHandler)
 
@@ -183,25 +166,31 @@ func runDNSControlRegistration(
 	client *backendregistry.Client,
 	registration backendregistry.RegisterRequest,
 	interval time.Duration,
+	domains *domain.Store,
+	allocations *allocation.Store,
 ) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for range ticker.C {
-		registerDNSControl(client, registration)
+		registerDNSControl(client, registration, domains, allocations)
 	}
 }
 
 func registerDNSControl(
 	client *backendregistry.Client,
 	registration backendregistry.RegisterRequest,
+	domains *domain.Store,
+	allocations *allocation.Store,
 ) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := client.Register(ctx, registration); err != nil {
 		log.Printf("backend DNS registration failed: %v", err)
+		return
 	}
+	refreshDomainPolicies(client, domains, allocations)
 }
 
 func runReconciler(
@@ -231,38 +220,6 @@ func runReconciler(
 	reconcile()
 	for range ticker.C {
 		reconcile()
-	}
-}
-
-func runDomainPolicySync(client *domain.Client, domains *domain.Store, allocations *allocation.Store, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for range ticker.C {
-		refreshDomainPolicies(client, domains, allocations)
-	}
-}
-
-func refreshDomainPolicies(client *domain.Client, domains *domain.Store, allocations *allocation.Store) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	snapshot, err := client.Fetch(ctx)
-	if err != nil {
-		log.Printf("backend domain policy sync failed: %v", err)
-		return
-	}
-	if err := domains.Replace(snapshot.Domains); err != nil {
-		log.Printf("backend domain policy validation failed: %v", err)
-		return
-	}
-	allocations.ReconcilePolicies(snapshot.Domains)
-	log.Printf("backend domain policies synchronized revision=%d count=%d", snapshot.Revision, len(snapshot.Domains))
-}
-
-func runDomainPolicySync(client *backendregistry.Client, domains *domain.Store, allocations *allocation.Store, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for range ticker.C {
-		refreshDomainPolicies(client, domains, allocations)
 	}
 }
 

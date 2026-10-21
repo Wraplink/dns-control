@@ -1,6 +1,7 @@
 package allocation
 
 import (
+	"net"
 	"sort"
 	"strings"
 	"sync"
@@ -19,6 +20,7 @@ type Store struct {
 	revision uint64
 
 	leaseDuration time.Duration
+	roundRobin    map[string]uint64
 }
 
 func NewStore(leaseDuration ...time.Duration) *Store {
@@ -29,6 +31,7 @@ func NewStore(leaseDuration ...time.Duration) *Store {
 
 	return &Store{
 		leases:        make(map[string]*Lease),
+		roundRobin:    make(map[string]uint64),
 		leaseDuration: duration,
 	}
 }
@@ -105,7 +108,7 @@ func (s *Store) Poll(agentID string, sniMax, routeMax int) []Lease {
 
 	for _, name := range domains {
 		lease := s.leases[name]
-		if lease.State != StatePending {
+		if lease.State != StatePending || strings.Contains(name, "#replica#") {
 			continue
 		}
 
@@ -132,6 +135,38 @@ func (s *Store) Poll(agentID string, sniMax, routeMax int) []Lease {
 		result = append(result, *lease)
 	}
 
+	// After assigning primary work, distribute existing SNI policies to
+	// additional agents. Only one lease per agent/domain is permitted.
+	for _, name := range domains {
+		if sniAssigned >= sniMax {
+			break
+		}
+		primary := s.leases[name]
+		if primary.Type != TypeSNI || primary.State != StateActive {
+			continue
+		}
+		alreadyAssigned := false
+		for _, lease := range s.leases {
+			if lease.Domain == primary.Domain && lease.AgentID == agentID &&
+				(lease.State == StateAssigned || lease.State == StateActive) {
+				alreadyAssigned = true
+				break
+			}
+		}
+		if alreadyAssigned {
+			continue
+		}
+		key := primary.Domain + "#replica#" + agentID
+		s.revision++
+		replica := &Lease{
+			ID: uuid.NewString(), Domain: primary.Domain, Type: TypeSNI,
+			State: StateAssigned, AgentID: agentID, SNI: primary.Domain,
+			Revision: s.revision, ExpiresAt: now.Add(s.leaseDuration),
+		}
+		s.leases[key] = replica
+		result = append(result, *replica)
+		sniAssigned++
+	}
 	return result
 }
 
@@ -162,7 +197,7 @@ func (s *Store) Heartbeat(agentID string, leaseIDs []string) []string {
 		}
 
 		if !lease.ExpiresAt.IsZero() && !lease.ExpiresAt.After(now) {
-			s.resetToPendingLocked(lease)
+			s.removeOrResetExpiredLocked(lease)
 			release = append(release, id)
 			continue
 		}
@@ -183,7 +218,7 @@ func (s *Store) Activate(leaseID, agentID, address, sni, routeID string) bool {
 
 	now := time.Now().UTC()
 	if !lease.ExpiresAt.IsZero() && !lease.ExpiresAt.After(now) {
-		s.resetToPendingLocked(lease)
+		s.removeOrResetExpiredLocked(lease)
 		return false
 	}
 
@@ -209,8 +244,86 @@ func (s *Store) Fail(leaseID, agentID string) bool {
 		return false
 	}
 
-	s.resetToPendingLocked(lease)
+	s.removeOrResetExpiredLocked(lease)
 	return true
+}
+
+// ActiveCandidates returns a stable ordered snapshot of all non-expired active
+// allocations for a domain. It supports multi-agent leases without exposing
+// the mutable backing store.
+// AddActiveReplica records a separately provisioned agent endpoint for a
+// managed domain. It must only be called after the agent reports successful
+// provisioning; it does not replace the primary lease.
+func (s *Store) AddActiveReplica(domain, agentID, address string) bool {
+	domain = normalize(domain)
+	agentID = strings.TrimSpace(agentID)
+	ip := net.ParseIP(strings.TrimSpace(address))
+	if agentID == "" || ip == nil || ip.To4() == nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	primary, ok := s.leases[domain]
+	if !ok || primary.Type != TypeSNI {
+		return false
+	}
+	for _, lease := range s.leases {
+		if lease.Domain == domain && lease.AgentID == agentID && lease.State == StateActive {
+			return false
+		}
+	}
+	s.revision++
+	key := domain + "#replica#" + agentID
+	s.leases[key] = &Lease{
+		ID: uuid.NewString(), Domain: domain, Type: TypeSNI,
+		State: StateActive, AgentID: agentID, Address: ip.To4().String(),
+		Revision: s.revision, ExpiresAt: time.Now().UTC().Add(s.leaseDuration),
+	}
+	return true
+}
+
+func (s *Store) ActiveCandidates(domain string) []Lease {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	now := time.Now().UTC()
+	var result []Lease
+	for _, lease := range s.leases {
+		if lease.Domain != normalize(domain) || lease.State != StateActive {
+			continue
+		}
+		if !lease.ExpiresAt.IsZero() && !lease.ExpiresAt.After(now) {
+			continue
+		}
+		result = append(result, *lease)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].AgentID == result[j].AgentID {
+			return result[i].ID < result[j].ID
+		}
+		return result[i].AgentID < result[j].AgentID
+	})
+	return result
+}
+
+// NextCandidate rotates through the eligible candidates. The predicate can
+// exclude offline agents and invalid addresses without consuming a DNS answer.
+func (s *Store) NextCandidate(domain string, eligible func(Lease) bool) (*Lease, bool) {
+	candidates := s.ActiveCandidates(domain)
+	filtered := make([]Lease, 0, len(candidates))
+	for _, lease := range candidates {
+		if eligible == nil || eligible(lease) {
+			filtered = append(filtered, lease)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil, false
+	}
+	s.mu.Lock()
+	index := s.roundRobin[normalize(domain)] % uint64(len(filtered))
+	s.roundRobin[normalize(domain)]++
+	s.mu.Unlock()
+	selected := filtered[index]
+	return &selected, true
 }
 
 func (s *Store) Get(domain string) (*Lease, bool) {
@@ -255,17 +368,33 @@ func (s *Store) findByIDLocked(id string) *Lease {
 
 func (s *Store) reclaimExpiredLocked(now time.Time) int {
 	changed := 0
-	for _, lease := range s.leases {
+	for name, lease := range s.leases {
 		if lease.State != StateAssigned && lease.State != StateActive {
 			continue
 		}
 		if lease.ExpiresAt.IsZero() || lease.ExpiresAt.After(now) {
 			continue
 		}
-		s.resetToPendingLocked(lease)
+		if strings.Contains(name, "#replica#") {
+			delete(s.leases, name)
+			s.revision++
+		} else {
+			s.resetToPendingLocked(lease)
+		}
 		changed++
 	}
 	return changed
+}
+
+func (s *Store) removeOrResetExpiredLocked(lease *Lease) {
+	for key, candidate := range s.leases {
+		if candidate == lease && strings.Contains(key, "#replica#") {
+			delete(s.leases, key)
+			s.revision++
+			return
+		}
+	}
+	s.resetToPendingLocked(lease)
 }
 
 func (s *Store) resetToPendingLocked(lease *Lease) {
@@ -292,7 +421,7 @@ func (s *Store) ReconcilePolicies(rules []domain.Rule) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for name, lease := range s.leases {
-		rule, ok := desired[name]
+		rule, ok := desired[lease.Domain]
 		if !ok || (rule.Mode == domain.ModeHijack && lease.Type != TypeSNI) ||
 			(rule.Mode == domain.ModeRoute && (lease.Type != TypeRoute ||
 				rule.Route == nil || lease.DestinationIP != rule.Route.DestinationIP ||
