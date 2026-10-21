@@ -19,6 +19,7 @@ type Handler struct {
 	entitlements *entitlement.Store
 	token        string
 	resolver     *dns.Resolver
+	syncStatus   *DomainSyncStatus
 }
 
 func NewHandler(
@@ -29,12 +30,21 @@ func NewHandler(
 	token string,
 	resolvers ...*dns.Resolver,
 ) http.Handler {
+	return newHandler(domains, allocations, agents, entitlements, token, nil, resolvers...)
+}
+
+func NewHandlerWithSyncStatus(domains *domain.Store, allocations *allocation.Store, agents *agentregistry.Store, entitlements *entitlement.Store, token string, status *DomainSyncStatus, resolvers ...*dns.Resolver) http.Handler {
+	return newHandler(domains, allocations, agents, entitlements, token, status, resolvers...)
+}
+
+func newHandler(domains *domain.Store, allocations *allocation.Store, agents *agentregistry.Store, entitlements *entitlement.Store, token string, status *DomainSyncStatus, resolvers ...*dns.Resolver) http.Handler {
 	h := &Handler{
 		domains:      domains,
 		allocations:  allocations,
 		agents:       agents,
 		entitlements: entitlements,
 		token:        token,
+		syncStatus:   status,
 	}
 
 	if len(resolvers) > 0 {
@@ -48,6 +58,7 @@ func NewHandler(
 	mux.HandleFunc("/api/v1/agent/report", h.report)
 	mux.HandleFunc("/api/v1/agents", h.agentsList)
 	mux.HandleFunc("/api/v1/domains", h.domainsList)
+	mux.HandleFunc("/api/v1/domains/sync-status", h.domainSyncStatus)
 	mux.HandleFunc("/api/v1/leases", h.handleListLeases)
 
 	return h.auth(mux)
@@ -277,4 +288,17 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// SetDomainSyncStatus connects the live sync tracker to the API handler.
+func (h *Handler) domainSyncStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.syncStatus == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "sync status unavailable"})
+		return
+	}
+	writeJSON(w, http.StatusOK, h.syncStatus.Snapshot())
 }
