@@ -7,8 +7,8 @@ import (
 
 	"github.com/wraplink/dns-control/internal/agentregistry"
 	"github.com/wraplink/dns-control/internal/allocation"
-	"github.com/wraplink/dns-control/internal/domain"
 	"github.com/wraplink/dns-control/internal/dns"
+	"github.com/wraplink/dns-control/internal/domain"
 	"github.com/wraplink/dns-control/internal/entitlement"
 )
 
