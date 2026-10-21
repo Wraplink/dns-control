@@ -234,7 +234,7 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !req.Success {
-		if !h.allocations.Fail(req.LeaseID, req.AgentID) {
+		if !h.allocations.FailWithGeneration(req.LeaseID, req.AgentID, req.Generation) {
 			writeJSON(w, http.StatusConflict, map[string]any{"error": "lease failure report rejected"})
 			return
 		}
