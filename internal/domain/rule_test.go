@@ -138,3 +138,23 @@ func TestConnectionModeRejectsUnsupportedSelector(t *testing.T) {
 		t.Fatal("expected unknown mode selector to be rejected")
 	}
 }
+
+func TestSpecificIPRule(t *testing.T) {
+	rule := Rule{Domain: " Example.COM. ", Mode: ModeSpecificIP, SpecificIP: " 192.0.2.30 "}.Normalize()
+	if rule.Domain != "example.com" || rule.SpecificIP != "192.0.2.30" {
+		t.Fatalf("unexpected normalization: %+v", rule)
+	}
+	if err := rule.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, invalid := range []Rule{
+		{Domain: "example.com", Mode: ModeSpecificIP},
+		{Domain: "example.com", Mode: ModeSpecificIP, SpecificIP: "invalid"},
+		{Domain: "example.com", Mode: ModeNormal, SpecificIP: "192.0.2.30"},
+		{Domain: "example.com", Mode: ModeSpecificIP, SpecificIP: "192.0.2.30", Route: &RoutePolicy{}},
+	} {
+		if err := invalid.Normalize().Validate(); err == nil {
+			t.Fatalf("expected invalid policy to fail: %+v", invalid)
+		}
+	}
+}
