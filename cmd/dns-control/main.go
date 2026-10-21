@@ -102,6 +102,7 @@ func main() {
 		cfg.DNS.TTL,
 		agentStore,
 	)
+	dnsHandler.SetAllowLoopbackQueries(cfg.DNS.AllowLoopbackQueries)
 	dnsServer := dns.NewServer(cfg.DNS.Listen, dnsHandler)
 
 	apiHandler := api.NewHandlerWithSyncStatus(
