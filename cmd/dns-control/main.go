@@ -233,17 +233,25 @@ func runReconciler(
 }
 
 func runDomainPolicySync(client *domain.Client, domains *domain.Store, allocations *allocation.Store, interval time.Duration) {
- ticker := time.NewTicker(interval)
- defer ticker.Stop()
- for range ticker.C {refreshDomainPolicies(client,domains,allocations)}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		refreshDomainPolicies(client, domains, allocations)
+	}
 }
 
 func refreshDomainPolicies(client *domain.Client, domains *domain.Store, allocations *allocation.Store) {
- ctx,cancel:=context.WithTimeout(context.Background(),10*time.Second)
- defer cancel()
- snapshot,err:=client.Fetch(ctx)
- if err!=nil {log.Printf("backend domain policy sync failed: %v",err);return}
- if err:=domains.Replace(snapshot.Domains);err!=nil {log.Printf("backend domain policy validation failed: %v",err);return}
- allocations.ReconcilePolicies(snapshot.Domains)
- log.Printf("backend domain policies synchronized revision=%d count=%d",snapshot.Revision,len(snapshot.Domains))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	snapshot, err := client.Fetch(ctx)
+	if err != nil {
+		log.Printf("backend domain policy sync failed: %v", err)
+		return
+	}
+	if err := domains.Replace(snapshot.Domains); err != nil {
+		log.Printf("backend domain policy validation failed: %v", err)
+		return
+	}
+	allocations.ReconcilePolicies(snapshot.Domains)
+	log.Printf("backend domain policies synchronized revision=%d count=%d", snapshot.Revision, len(snapshot.Domains))
 }
