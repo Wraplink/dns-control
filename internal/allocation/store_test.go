@@ -129,3 +129,33 @@ func TestRouteWithoutBackendAssignmentFailsClosed(t *testing.T) {
 		t.Fatalf("unassigned route was dispatched: %+v", got)
 	}
 }
+
+func TestAssignmentChangeRevokesOldLeaseAndRejectsStaleAck(t *testing.T) {
+	store := NewStore(time.Minute)
+	rule := domain.Rule{
+		Domain:     "change.example",
+		Mode:       domain.ModeRoute,
+		Route: &domain.RoutePolicy{DestinationIP: "198.51.100.10", Protocol: "tcp"},
+		Assignment: &domain.RouteAssignment{AgentID: "edge-a", PublicIP: "192.0.2.10", Generation: 1},
+	}
+	store.ReconcilePolicies([]domain.Rule{rule})
+	first := store.Poll("edge-a", 0, 1)
+	if len(first) != 1 {
+		t.Fatalf("expected initial route, got %+v", first)
+	}
+	rule.Assignment = &domain.RouteAssignment{AgentID: "edge-b", PublicIP: "192.0.2.11", Generation: 2}
+	store.ReconcilePolicies([]domain.Rule{rule})
+	if store.ActivateWithGeneration(first[0].ID, "edge-a", "192.0.2.10", "", "old", 1) {
+		t.Fatal("revoked lease accepted a stale acknowledgement")
+	}
+	if got := store.Heartbeat("edge-a", []string{first[0].ID}); len(got) != 1 {
+		t.Fatalf("old agent must release revoked lease, got %+v", got)
+	}
+	if got := store.Poll("edge-a", 0, 1); len(got) != 0 {
+		t.Fatalf("old agent must not receive new generation: %+v", got)
+	}
+	next := store.Poll("edge-b", 0, 1)
+	if len(next) != 1 || next[0].Generation != 2 || next[0].Address != "192.0.2.11" {
+		t.Fatalf("expected reassigned generation 2, got %+v", next)
+	}
+}
