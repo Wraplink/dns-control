@@ -102,6 +102,9 @@ func main() {
 	}
 
 	resolver := dns.NewResolver(cfg.DNS.Upstream)
+	if cfg.DNS.ParentURL != "" {
+		resolver.SetParent(cfg.DNS.ParentURL, cfg.DNS.ParentToken)
+	}
 	dnsHandler := dns.NewHandler(
 		resolver,
 		domainStore,
@@ -117,6 +120,7 @@ func main() {
 		agentStore,
 		entitlementStore,
 		cfg.Agent.Token,
+		resolver,
 	)
 	apiServer := api.NewServer(cfg.API.Listen, apiHandler)
 
