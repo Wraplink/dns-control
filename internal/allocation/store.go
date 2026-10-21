@@ -369,7 +369,7 @@ func (s *Store) findByIDLocked(id string) *Lease {
 
 func (s *Store) reclaimExpiredLocked(now time.Time) int {
 	changed := 0
-	for _, lease := range s.leases {
+	for name, lease := range s.leases {
 		if lease.State != StateAssigned && lease.State != StateActive {
 			continue
 		}
