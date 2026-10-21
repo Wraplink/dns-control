@@ -131,28 +131,17 @@ func (h *Handler) handleHijack(
 		return
 	}
 
-	allocation, ok := h.allocations.Get(domainName)
+	selected, ok := h.allocations.NextCandidate(domainName, func(lease allocation.Lease) bool {
+		ip := net.ParseIP(lease.Address)
+		return lease.Type == allocation.TypeSNI && h.healthyAgent(lease.AgentID, lease.Type) &&
+			ip != nil && ip.To4() != nil
+	})
 	if !ok {
-		log.Printf("dns: no SNI allocation for %q", domainName)
+		log.Printf("dns: no healthy SNI allocation for %q", domainName)
 		h.serverFailure(w, req)
 		return
 	}
-
-	if !h.healthyAgent(allocation.AgentID, allocation.Type) {
-		h.serverFailure(w, req)
-		return
-	}
-	ip := net.ParseIP(allocation.Address)
-	if ip == nil || ip.To4() == nil {
-		log.Printf(
-			"dns: invalid SNI allocation address domain=%q address=%q",
-			domainName,
-			allocation.Address,
-		)
-		h.serverFailure(w, req)
-		return
-	}
-
+	ip := net.ParseIP(selected.Address)
 	h.writeAddressResponse(w, req, ip.To4())
 }
 
