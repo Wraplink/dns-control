@@ -96,7 +96,11 @@ func (r Rule) Validate() error {
 		)
 	}
 
-	if ip := net.ParseIP(r.Route.DestinationIP); ip == nil || ip.To4() == nil {
+	// An unassigned route may still be awaiting backend DNS resolution. Keep
+	// it in the snapshot, but allocation reconciliation must fail closed.
+	if r.Route.DestinationIP == "" && r.Assignment == nil {
+		// No destination is needed until an authoritative assignment exists.
+	} else if ip := net.ParseIP(r.Route.DestinationIP); ip == nil || ip.To4() == nil {
 		return fmt.Errorf(
 			"route destination_ip must be a valid IPv4 address for domain %q",
 			r.Domain,
