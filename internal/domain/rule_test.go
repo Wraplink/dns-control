@@ -175,3 +175,18 @@ func TestRouteRuleAcceptsCombinedTCPUDP(t *testing.T) {
 		t.Fatalf("combined protocol should be accepted: %v", err)
 	}
 }
+
+func TestUnresolvedRouteRequiresNoAssignment(t *testing.T) {
+	pending := Rule{
+		Domain: "pending.example",
+		Mode:   ModeRoute,
+		Route:  &RoutePolicy{Protocol: "tcp_udp"},
+	}
+	if err := pending.Validate(); err != nil {
+		t.Fatalf("unassigned route awaiting resolution should sync: %v", err)
+	}
+	pending.Assignment = &RouteAssignment{AgentID: "edge-a", PublicIP: "192.0.2.10", Generation: 1}
+	if err := pending.Validate(); err == nil {
+		t.Fatal("assigned route without resolved destination must be rejected")
+	}
+}
