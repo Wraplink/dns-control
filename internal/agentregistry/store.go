@@ -18,22 +18,22 @@ type Capacity struct {
 }
 
 type Diagnostics struct {
-	AdvertisedIPs []string `json:"advertised_ips,omitempty"`
-	UpstreamDNS []string `json:"upstream_dns,omitempty"`
-	SNIEnabled bool `json:"sni_enabled"`
-	SNIListenAddress string `json:"sni_listen_address,omitempty"`
-	Version string `json:"version,omitempty"`
+	AdvertisedIPs    []string `json:"advertised_ips,omitempty"`
+	UpstreamDNS      []string `json:"upstream_dns,omitempty"`
+	SNIEnabled       bool     `json:"sni_enabled"`
+	SNIListenAddress string   `json:"sni_listen_address,omitempty"`
+	Version          string   `json:"version,omitempty"`
 }
 
 type Agent struct {
-	Diagnostics Diagnostics `json:"diagnostics"`
-	ObservedIP string `json:"observed_ip,omitempty"`
-	ID           string    `json:"id"`
-	Region       string    `json:"region,omitempty"`
-	Capacity     Capacity  `json:"capacity"`
-	Status       string    `json:"status"`
-	RegisteredAt time.Time `json:"registered_at"`
-	LastSeenAt   time.Time `json:"last_seen_at"`
+	Diagnostics  Diagnostics `json:"diagnostics"`
+	ObservedIP   string      `json:"observed_ip,omitempty"`
+	ID           string      `json:"id"`
+	Region       string      `json:"region,omitempty"`
+	Capacity     Capacity    `json:"capacity"`
+	Status       string      `json:"status"`
+	RegisteredAt time.Time   `json:"registered_at"`
+	LastSeenAt   time.Time   `json:"last_seen_at"`
 }
 
 type Store struct {
