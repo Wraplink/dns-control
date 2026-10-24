@@ -7,9 +7,10 @@ import (
 )
 
 type RegisterRequest struct {
-	AgentID  string                 `json:"agent_id"`
-	Region   string                 `json:"region,omitempty"`
-	Capacity agentregistry.Capacity `json:"capacity"`
+	AgentID     string                    `json:"agent_id"`
+	Region      string                    `json:"region,omitempty"`
+	Capacity    agentregistry.Capacity    `json:"capacity"`
+	Diagnostics agentregistry.Diagnostics `json:"diagnostics"`
 }
 
 type RegisterResponse struct {
