@@ -63,10 +63,10 @@ func TestManagedDomainWithoutAllocationFailsClosed(t *testing.T) {
 
 func TestManagedDNSPolicyMatrix(t *testing.T) {
 	cases := []struct {
-		name string
-		rule domain.Rule
-		qtype uint16
-		wantRcode int
+		name        string
+		rule        domain.Rule
+		qtype       uint16
+		wantRcode   int
 		wantAnswers int
 	}{
 		{name: "specific IPv4 A", rule: domain.Rule{Domain: "specific.example", Mode: domain.ModeSpecificIP, SpecificIP: "192.0.2.10"}, qtype: mdns.TypeA, wantRcode: mdns.RcodeSuccess, wantAnswers: 1},
@@ -78,13 +78,17 @@ func TestManagedDNSPolicyMatrix(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			store, err := domain.NewStore([]domain.Rule{tc.rule})
-			if err != nil { t.Fatal(err) }
+			if err != nil {
+				t.Fatal(err)
+			}
 			h := NewHandler(nil, store, allocation.NewStore(), nil, 30)
 			req := new(mdns.Msg)
 			req.SetQuestion(mdns.Fqdn(tc.rule.Domain), tc.qtype)
 			w := &capturingDNSWriter{}
 			h.ServeDNS(w, req)
-			if w.response == nil { t.Fatal("missing DNS response") }
+			if w.response == nil {
+				t.Fatal("missing DNS response")
+			}
 			if w.response.Rcode != tc.wantRcode || len(w.response.Answer) != tc.wantAnswers {
 				t.Fatalf("rcode=%d answers=%d; want rcode=%d answers=%d", w.response.Rcode, len(w.response.Answer), tc.wantRcode, tc.wantAnswers)
 			}
