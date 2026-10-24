@@ -1,6 +1,7 @@
 package api
 
 import (
+	"net"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -106,6 +107,12 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	agent := h.agents.Upsert(req.AgentID, req.Region, req.Capacity)
+	observedIP, _, splitErr := net.SplitHostPort(r.RemoteAddr)
+	if splitErr != nil {
+		observedIP = r.RemoteAddr
+	}
+	h.agents.SetDiagnostics(req.AgentID, req.Diagnostics, observedIP)
+	agent, _ = h.agents.Get(req.AgentID)
 	writeJSON(w, http.StatusOK, RegisterResponse{OK: true, Agent: agent})
 }
 
