@@ -7,7 +7,7 @@ const (
 	ModeRoute      Mode = "route"
 	ModeNormal     Mode = "normal"
 	ModeSpecificIP Mode = "specific_ip"
-	ModeBlock Mode = "block"
+	ModeBlock      Mode = "block"
 )
 
 func (m Mode) Valid() bool {
