@@ -198,7 +198,6 @@ func canonicalIPv4(value string) string {
 	return ip.To4().String()
 }
 
-
 // InspectAccess returns a snapshot of effective, currently authorized client IPs.
 func (s *Store) InspectAccess() (uint64, bool, []Grant) {
 	revision, grants := s.AccessSnapshot()
