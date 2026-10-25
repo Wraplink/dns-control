@@ -311,7 +311,6 @@ func (h *Handler) domainSyncStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, h.syncStatus.Snapshot())
 }
 
-
 // allowedIPs is protected by the existing control API bearer authentication.
 func (h *Handler) allowedIPs(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -329,10 +328,10 @@ func (h *Handler) allowedIPs(w http.ResponseWriter, r *http.Request) {
 	}
 	revision, fresh, grants := h.entitlements.InspectAccess()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"enforced": true,
-		"fresh": fresh,
-		"revision": revision,
-		"count": len(grants),
+		"enforced":    true,
+		"fresh":       fresh,
+		"revision":    revision,
+		"count":       len(grants),
 		"allowed_ips": grants,
 	})
 }
