@@ -91,6 +91,10 @@ func (h *Handler) ServeDNS(
 	}
 
 	switch rule.Mode {
+	case domain.ModeBlock:
+		resp := new(mdns.Msg)
+		resp.SetRcode(req, mdns.RcodeRefused)
+		_ = w.WriteMsg(resp)
 	case domain.ModeHijack:
 		h.handleHijack(w, req, rule.Domain)
 	case domain.ModeRoute:
