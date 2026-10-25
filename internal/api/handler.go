@@ -58,6 +58,7 @@ func newHandler(domains *domain.Store, allocations *allocation.Store, agents *ag
 	mux.HandleFunc("/api/v1/agent/heartbeat", h.heartbeat)
 	mux.HandleFunc("/api/v1/agent/report", h.report)
 	mux.HandleFunc("/api/v1/agents", h.agentsList)
+	mux.HandleFunc("/api/v1/access/allowed-ips", h.allowedIPs)
 	mux.HandleFunc("/api/v1/domains", h.domainsList)
 	mux.HandleFunc("/api/v1/domains/sync-status", h.domainSyncStatus)
 	mux.HandleFunc("/api/v1/leases", h.handleListLeases)
@@ -308,4 +309,30 @@ func (h *Handler) domainSyncStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, h.syncStatus.Snapshot())
+}
+
+
+// allowedIPs is protected by the existing control API bearer authentication.
+func (h *Handler) allowedIPs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if h.token == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "diagnostics require an API token"})
+		return
+	}
+	if h.entitlements == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"enforced": false, "fresh": false, "revision": 0, "allowed_ips": []any{}})
+		return
+	}
+	revision, fresh, grants := h.entitlements.InspectAccess()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"enforced": true,
+		"fresh": fresh,
+		"revision": revision,
+		"count": len(grants),
+		"allowed_ips": grants,
+	})
 }
