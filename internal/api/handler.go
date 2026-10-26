@@ -2,6 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"context"
+	"log"
+	"time"
+
+	"github.com/wraplink/dns-control/internal/backendregistry"
 	"net"
 	"net/http"
 	"strings"
@@ -21,6 +26,7 @@ type Handler struct {
 	token        string
 	resolver     *dns.Resolver
 	syncStatus   *DomainSyncStatus
+	backendRoutes *backendregistry.Client
 }
 
 func NewHandler(
@@ -64,6 +70,42 @@ func newHandler(domains *domain.Store, allocations *allocation.Store, agents *ag
 	mux.HandleFunc("/api/v1/leases", h.handleListLeases)
 
 	return h.auth(mux)
+}
+
+// SetRouteReporter configures durable backend state synchronization. The periodic
+// reconciler retries reports after temporary backend failures.
+func (h *Handler) SetRouteReporter(client *backendregistry.Client) {
+	h.backendRoutes = client
+}
+
+func (h *Handler) SyncActiveRoutes(ctx context.Context) {
+	if h.backendRoutes == nil {
+		return
+	}
+	for _, lease := range h.allocations.List() {
+		if lease.Type != allocation.TypeRoute || lease.State != allocation.StateActive || lease.Generation <= 0 {
+			continue
+		}
+		if err := h.backendRoutes.ReportRouteActivation(ctx, backendregistry.RouteActivation{
+			Domain: lease.Domain, AgentID: lease.AgentID, PublicIP: lease.Address,
+			Generation: lease.Generation, Active: true,
+		}); err != nil {
+			log.Printf("backend route activation sync failed domain=%s generation=%d: %v", lease.Domain, lease.Generation, err)
+		}
+	}
+}
+
+func (h *Handler) RunRouteReporter(ctx context.Context, interval time.Duration) {
+	if interval <= 0 { interval = 10 * time.Second }
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		h.SyncActiveRoutes(ctx)
+		select {
+		case <-ctx.Done(): return
+		case <-ticker.C:
+		}
+	}
 }
 
 func (h *Handler) auth(next http.Handler) http.Handler {
@@ -254,6 +296,20 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "lease activation rejected"})
 		return
+	}
+	// The local lease is already active. A background reconciliation retries
+	// backend acknowledgments if this request fails or the backend is offline.
+	if h.backendRoutes != nil && req.Generation > 0 {
+		if lease, found := h.allocations.GetByID(req.LeaseID); found && lease.Type == allocation.TypeRoute {
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			defer cancel()
+			if err := h.backendRoutes.ReportRouteActivation(ctx, backendregistry.RouteActivation{
+				Domain: lease.Domain, AgentID: req.AgentID, PublicIP: req.Address,
+				Generation: req.Generation, Active: true,
+			}); err != nil {
+				log.Printf("backend route activation report pending retry lease=%s: %v", req.LeaseID, err)
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, ReportResponse{OK: true})
 }
