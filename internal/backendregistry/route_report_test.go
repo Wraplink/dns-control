@@ -11,9 +11,9 @@ import (
 
 func TestRouteReportProtocol(t *testing.T) {
 	tests := []struct {
-		name string
-		active bool
-		status int
+		name      string
+		active    bool
+		status    int
 		wantStale bool
 		wantError bool
 	}{
