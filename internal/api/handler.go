@@ -71,6 +71,7 @@ func newHandler(domains *domain.Store, allocations *allocation.Store, agents *ag
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/dns/resolve", h.resolveDNS)
+	mux.HandleFunc("/api/v1/dns/origin-ipv4", h.resolveOriginIPv4)
 	mux.HandleFunc("/api/v1/agent/register", h.register)
 	mux.HandleFunc("/api/v1/agent/poll", h.poll)
 	mux.HandleFunc("/api/v1/agent/heartbeat", h.heartbeat)
