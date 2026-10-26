@@ -18,15 +18,15 @@ import (
 )
 
 type Handler struct {
-	domains      *domain.Store
-	allocations  *allocation.Store
-	agents       *agentregistry.Store
-	entitlements *entitlement.Store
-	token        string
-	resolver     *dns.Resolver
-	syncStatus     *DomainSyncStatus
-	backendRoutes  *backendregistry.Client
-	router         http.Handler
+	domains       *domain.Store
+	allocations   *allocation.Store
+	agents        *agentregistry.Store
+	entitlements  *entitlement.Store
+	token         string
+	resolver      *dns.Resolver
+	syncStatus    *DomainSyncStatus
+	backendRoutes *backendregistry.Client
+	router        http.Handler
 }
 
 func NewHandler(
@@ -95,8 +95,11 @@ func (h *Handler) SyncActiveRoutes(ctx context.Context) {
 			continue
 		}
 		if err := h.backendRoutes.ReportRouteActivation(ctx, backendregistry.RouteActivation{
-			Domain: lease.Domain, AgentID: lease.AgentID, PublicIP: lease.Address,
-			Generation: lease.Generation, Active: true,
+			Domain:     lease.Domain,
+			AgentID:    lease.AgentID,
+			PublicIP:   lease.Address,
+			Generation: lease.Generation,
+			Active:     true,
 		}); err != nil {
 			log.Printf("backend route activation sync failed domain=%s generation=%d: %v", lease.Domain, lease.Generation, err)
 		}
@@ -317,8 +320,11 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			defer cancel()
 			if err := h.backendRoutes.ReportRouteActivation(ctx, backendregistry.RouteActivation{
-				Domain: lease.Domain, AgentID: req.AgentID, PublicIP: req.Address,
-				Generation: req.Generation, Active: true,
+				Domain:     lease.Domain,
+				AgentID:    req.AgentID,
+				PublicIP:   req.Address,
+				Generation: req.Generation,
+				Active:     true,
 			}); err != nil {
 				log.Printf("backend route activation report pending retry lease=%s: %v", req.LeaseID, err)
 			}
