@@ -163,7 +163,10 @@ func (h *Handler) handleRoute(
 	domainName string,
 ) {
 	if req.Question[0].Qtype != mdns.TypeA {
-		h.handleNormal(w, req)
+		// A Full Route policy must never leak the original upstream address,
+		// including through AAAA or other address-bearing DNS responses.
+		// IPv6 is not provisioned by the current IPv4-only route allocator.
+		h.serverFailure(w, req)
 		return
 	}
 
