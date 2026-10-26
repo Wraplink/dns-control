@@ -90,8 +90,10 @@ func (h *Handler) SyncActiveRoutes(ctx context.Context) {
 	if h.backendRoutes == nil {
 		return
 	}
+	now := time.Now().UTC()
 	for _, lease := range h.allocations.List() {
-		if lease.Type != allocation.TypeRoute || lease.State != allocation.StateActive || lease.Generation <= 0 {
+		if lease.Type != allocation.TypeRoute || lease.State != allocation.StateActive || lease.Generation <= 0 ||
+			(!lease.ExpiresAt.IsZero() && !lease.ExpiresAt.After(now)) {
 			continue
 		}
 		if err := h.backendRoutes.ReportRouteActivation(ctx, backendregistry.RouteActivation{
