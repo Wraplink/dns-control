@@ -105,13 +105,19 @@ func main() {
 	dnsHandler.SetAllowLoopbackQueries(cfg.DNS.AllowLoopbackQueries)
 	dnsServer := dns.NewServer(cfg.DNS.Listen, dnsHandler)
 
-	apiHandler := api.NewHandlerWithSyncStatus(
+	var routeReporter *backendregistry.Client
+	if cfg.Backend.Enabled() && cfg.Node.Enabled() {
+		routeReporter = backendregistry.NewClient(cfg.Backend.URL, cfg.Backend.ControlKey)
+	}
+	apiHandler := api.NewHandlerWithRouteReporter(
+		context.Background(),
 		domainStore,
 		allocationStore,
 		agentStore,
 		entitlementStore,
 		cfg.Agent.Token,
 		syncStatus,
+		routeReporter,
 		resolver,
 	)
 	apiServer := api.NewServer(cfg.API.Listen, apiHandler)
