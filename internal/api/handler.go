@@ -3,10 +3,12 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wraplink/dns-control/internal/agentregistry"
@@ -27,6 +29,8 @@ type Handler struct {
 	syncStatus    *DomainSyncStatus
 	backendRoutes *backendregistry.Client
 	router        http.Handler
+	reportMu      sync.Mutex
+	reported      map[string]backendregistry.RouteActivation
 }
 
 func NewHandler(
@@ -59,6 +63,7 @@ func newHandler(domains *domain.Store, allocations *allocation.Store, agents *ag
 		entitlements: entitlements,
 		token:        token,
 		syncStatus:   status,
+		reported:     make(map[string]backendregistry.RouteActivation),
 	}
 
 	if len(resolvers) > 0 {
@@ -86,25 +91,54 @@ func (h *Handler) SetRouteReporter(client *backendregistry.Client) {
 	h.backendRoutes = client
 }
 
+// SyncActiveRoutes serializes activation and withdrawal reports. The last
+// acknowledged identity is retained until a withdrawal succeeds, so temporary
+// backend outages cannot silently lose a deactivation event.
 func (h *Handler) SyncActiveRoutes(ctx context.Context) {
 	if h.backendRoutes == nil {
 		return
 	}
+	h.reportMu.Lock()
+	defer h.reportMu.Unlock()
 	now := time.Now().UTC()
+	current := make(map[string]backendregistry.RouteActivation)
 	for _, lease := range h.allocations.List() {
 		if lease.Type != allocation.TypeRoute || lease.State != allocation.StateActive || lease.Generation <= 0 ||
 			(!lease.ExpiresAt.IsZero() && !lease.ExpiresAt.After(now)) {
 			continue
 		}
-		if err := h.backendRoutes.ReportRouteActivation(ctx, backendregistry.RouteActivation{
+		current[lease.Domain] = backendregistry.RouteActivation{
 			Domain:     lease.Domain,
 			AgentID:    lease.AgentID,
 			PublicIP:   lease.Address,
 			Generation: lease.Generation,
 			Active:     true,
-		}); err != nil {
-			log.Printf("backend route activation sync failed domain=%s generation=%d: %v", lease.Domain, lease.Generation, err)
 		}
+	}
+	for domain, previous := range h.reported {
+		if active, ok := current[domain]; ok && active.AgentID == previous.AgentID && active.PublicIP == previous.PublicIP && active.Generation == previous.Generation {
+			continue
+		}
+		previous.Active = false
+		if err := h.backendRoutes.ReportRouteActivation(ctx, previous); err != nil {
+			if errors.Is(err, backendregistry.ErrStaleAssignment) {
+				delete(h.reported, domain)
+				continue
+			}
+			log.Printf("backend route deactivation sync failed domain=%s generation=%d: %v", domain, previous.Generation, err)
+			continue
+		}
+		delete(h.reported, domain)
+	}
+	for domain, active := range current {
+		if _, waitingForWithdrawal := h.reported[domain]; waitingForWithdrawal {
+			continue
+		}
+		if err := h.backendRoutes.ReportRouteActivation(ctx, active); err != nil {
+			log.Printf("backend route activation sync failed domain=%s generation=%d: %v", domain, active.Generation, err)
+			continue
+		}
+		h.reported[domain] = active
 	}
 }
 
@@ -315,23 +349,8 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "lease activation rejected"})
 		return
 	}
-	// The local lease is already active. A background reconciliation retries
-	// backend acknowledgments if this request fails or the backend is offline.
-	if h.backendRoutes != nil && req.Generation > 0 {
-		if lease, found := h.allocations.GetByID(req.LeaseID); found && lease.Type == allocation.TypeRoute {
-			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-			defer cancel()
-			if err := h.backendRoutes.ReportRouteActivation(ctx, backendregistry.RouteActivation{
-				Domain:     lease.Domain,
-				AgentID:    req.AgentID,
-				PublicIP:   req.Address,
-				Generation: req.Generation,
-				Active:     true,
-			}); err != nil {
-				log.Printf("backend route activation report pending retry lease=%s: %v", req.LeaseID, err)
-			}
-		}
-	}
+	// The periodic reporter serializes activation and withdrawal. Avoid
+	// racing an in-flight deactivation with an immediate activation report.
 	writeJSON(w, http.StatusOK, ReportResponse{OK: true})
 }
 
