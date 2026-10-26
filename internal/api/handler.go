@@ -1,26 +1,32 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"log"
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/wraplink/dns-control/internal/agentregistry"
 	"github.com/wraplink/dns-control/internal/allocation"
+	"github.com/wraplink/dns-control/internal/backendregistry"
 	"github.com/wraplink/dns-control/internal/dns"
 	"github.com/wraplink/dns-control/internal/domain"
 	"github.com/wraplink/dns-control/internal/entitlement"
 )
 
 type Handler struct {
-	domains      *domain.Store
-	allocations  *allocation.Store
-	agents       *agentregistry.Store
-	entitlements *entitlement.Store
-	token        string
-	resolver     *dns.Resolver
-	syncStatus   *DomainSyncStatus
+	domains       *domain.Store
+	allocations   *allocation.Store
+	agents        *agentregistry.Store
+	entitlements  *entitlement.Store
+	token         string
+	resolver      *dns.Resolver
+	syncStatus    *DomainSyncStatus
+	backendRoutes *backendregistry.Client
+	router        http.Handler
 }
 
 func NewHandler(
@@ -31,14 +37,21 @@ func NewHandler(
 	token string,
 	resolvers ...*dns.Resolver,
 ) http.Handler {
-	return newHandler(domains, allocations, agents, entitlements, token, nil, resolvers...)
+	return newHandler(domains, allocations, agents, entitlements, token, nil, resolvers...).authHandler()
 }
 
 func NewHandlerWithSyncStatus(domains *domain.Store, allocations *allocation.Store, agents *agentregistry.Store, entitlements *entitlement.Store, token string, status *DomainSyncStatus, resolvers ...*dns.Resolver) http.Handler {
-	return newHandler(domains, allocations, agents, entitlements, token, status, resolvers...)
+	return newHandler(domains, allocations, agents, entitlements, token, status, resolvers...).authHandler()
 }
 
-func newHandler(domains *domain.Store, allocations *allocation.Store, agents *agentregistry.Store, entitlements *entitlement.Store, token string, status *DomainSyncStatus, resolvers ...*dns.Resolver) http.Handler {
+func NewHandlerWithRouteReporter(ctx context.Context, domains *domain.Store, allocations *allocation.Store, agents *agentregistry.Store, entitlements *entitlement.Store, token string, status *DomainSyncStatus, reporter *backendregistry.Client, resolvers ...*dns.Resolver) http.Handler {
+	handler := newHandler(domains, allocations, agents, entitlements, token, status, resolvers...)
+	handler.SetRouteReporter(reporter)
+	go handler.RunRouteReporter(ctx, 10*time.Second)
+	return handler.authHandler()
+}
+
+func newHandler(domains *domain.Store, allocations *allocation.Store, agents *agentregistry.Store, entitlements *entitlement.Store, token string, status *DomainSyncStatus, resolvers ...*dns.Resolver) *Handler {
 	h := &Handler{
 		domains:      domains,
 		allocations:  allocations,
@@ -63,8 +76,53 @@ func newHandler(domains *domain.Store, allocations *allocation.Store, agents *ag
 	mux.HandleFunc("/api/v1/domains/sync-status", h.domainSyncStatus)
 	mux.HandleFunc("/api/v1/leases", h.handleListLeases)
 
-	return h.auth(mux)
+	h.router = mux
+	return h
 }
+
+// SetRouteReporter configures durable backend state synchronization. The periodic
+// reconciler retries reports after temporary backend failures.
+func (h *Handler) SetRouteReporter(client *backendregistry.Client) {
+	h.backendRoutes = client
+}
+
+func (h *Handler) SyncActiveRoutes(ctx context.Context) {
+	if h.backendRoutes == nil {
+		return
+	}
+	for _, lease := range h.allocations.List() {
+		if lease.Type != allocation.TypeRoute || lease.State != allocation.StateActive || lease.Generation <= 0 {
+			continue
+		}
+		if err := h.backendRoutes.ReportRouteActivation(ctx, backendregistry.RouteActivation{
+			Domain:     lease.Domain,
+			AgentID:    lease.AgentID,
+			PublicIP:   lease.Address,
+			Generation: lease.Generation,
+			Active:     true,
+		}); err != nil {
+			log.Printf("backend route activation sync failed domain=%s generation=%d: %v", lease.Domain, lease.Generation, err)
+		}
+	}
+}
+
+func (h *Handler) RunRouteReporter(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = 10 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		h.SyncActiveRoutes(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (h *Handler) authHandler() http.Handler { return h.auth(h.router) }
 
 func (h *Handler) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -254,6 +312,23 @@ func (h *Handler) report(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "lease activation rejected"})
 		return
+	}
+	// The local lease is already active. A background reconciliation retries
+	// backend acknowledgments if this request fails or the backend is offline.
+	if h.backendRoutes != nil && req.Generation > 0 {
+		if lease, found := h.allocations.GetByID(req.LeaseID); found && lease.Type == allocation.TypeRoute {
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			defer cancel()
+			if err := h.backendRoutes.ReportRouteActivation(ctx, backendregistry.RouteActivation{
+				Domain:     lease.Domain,
+				AgentID:    req.AgentID,
+				PublicIP:   req.Address,
+				Generation: req.Generation,
+				Active:     true,
+			}); err != nil {
+				log.Printf("backend route activation report pending retry lease=%s: %v", req.LeaseID, err)
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, ReportResponse{OK: true})
 }
