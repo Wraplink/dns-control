@@ -28,7 +28,8 @@ func (h *Handler) resolveOriginIPv4(w http.ResponseWriter, r *http.Request) {
   return
  }
  domain := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(req.Domain)), ".")
- if domain == "" || len(domain) > 253 || !mdns.IsDomainName(domain) {
+ _, valid := mdns.IsDomainName(domain)
+ if domain == "" || len(domain) > 253 || !valid {
   http.Error(w, "invalid domain", http.StatusBadRequest)
   return
  }
