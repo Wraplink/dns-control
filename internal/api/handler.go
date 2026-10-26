@@ -27,6 +27,7 @@ type Handler struct {
 	resolver     *dns.Resolver
 	syncStatus   *DomainSyncStatus
 	backendRoutes *backendregistry.Client
+	router http.Handler
 }
 
 func NewHandler(
@@ -37,14 +38,21 @@ func NewHandler(
 	token string,
 	resolvers ...*dns.Resolver,
 ) http.Handler {
-	return newHandler(domains, allocations, agents, entitlements, token, nil, resolvers...)
+	return newHandler(domains, allocations, agents, entitlements, token, nil, resolvers...).authHandler()
 }
 
 func NewHandlerWithSyncStatus(domains *domain.Store, allocations *allocation.Store, agents *agentregistry.Store, entitlements *entitlement.Store, token string, status *DomainSyncStatus, resolvers ...*dns.Resolver) http.Handler {
-	return newHandler(domains, allocations, agents, entitlements, token, status, resolvers...)
+	return newHandler(domains, allocations, agents, entitlements, token, status, resolvers...).authHandler()
 }
 
-func newHandler(domains *domain.Store, allocations *allocation.Store, agents *agentregistry.Store, entitlements *entitlement.Store, token string, status *DomainSyncStatus, resolvers ...*dns.Resolver) http.Handler {
+func NewHandlerWithRouteReporter(ctx context.Context, domains *domain.Store, allocations *allocation.Store, agents *agentregistry.Store, entitlements *entitlement.Store, token string, status *DomainSyncStatus, reporter *backendregistry.Client, resolvers ...*dns.Resolver) http.Handler {
+	handler := newHandler(domains, allocations, agents, entitlements, token, status, resolvers...)
+	handler.SetRouteReporter(reporter)
+	go handler.RunRouteReporter(ctx, 10*time.Second)
+	return handler.authHandler()
+}
+
+func newHandler(domains *domain.Store, allocations *allocation.Store, agents *agentregistry.Store, entitlements *entitlement.Store, token string, status *DomainSyncStatus, resolvers ...*dns.Resolver) *Handler {
 	h := &Handler{
 		domains:      domains,
 		allocations:  allocations,
@@ -69,7 +77,8 @@ func newHandler(domains *domain.Store, allocations *allocation.Store, agents *ag
 	mux.HandleFunc("/api/v1/domains/sync-status", h.domainSyncStatus)
 	mux.HandleFunc("/api/v1/leases", h.handleListLeases)
 
-	return h.auth(mux)
+	h.router = mux
+	return h
 }
 
 // SetRouteReporter configures durable backend state synchronization. The periodic
@@ -107,6 +116,8 @@ func (h *Handler) RunRouteReporter(ctx context.Context, interval time.Duration) 
 		}
 	}
 }
+
+func (h *Handler) authHandler() http.Handler { return h.auth(h.router) }
 
 func (h *Handler) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
