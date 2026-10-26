@@ -4,10 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 )
+
+// ErrStaleAssignment means the backend no longer recognizes this generation.
+var ErrStaleAssignment = errors.New("stale route assignment")
 
 type RouteActivation struct {
 	Domain     string `json:"domain"`
@@ -35,6 +39,9 @@ func (c *Client) ReportRouteActivation(ctx context.Context, report RouteActivati
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusConflict {
+			return ErrStaleAssignment
+		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		return fmt.Errorf("report route activation: HTTP %d: %s", resp.StatusCode, body)
 	}
