@@ -337,6 +337,18 @@ func (s *Store) NextCandidate(domain string, eligible func(Lease) bool) (*Lease,
 	return &selected, true
 }
 
+// GetByID returns a copy of a current active lease for acknowledgement.
+func (s *Store) GetByID(id string) (*Lease, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	lease := s.findByIDLocked(id)
+	if lease == nil || lease.State != StateActive || (!lease.ExpiresAt.IsZero() && !lease.ExpiresAt.After(time.Now().UTC())) {
+		return nil, false
+	}
+	copy := *lease
+	return &copy, true
+}
+
 func (s *Store) Get(domain string) (*Lease, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
