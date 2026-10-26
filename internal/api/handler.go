@@ -1,18 +1,17 @@
 package api
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"log"
-	"time"
-
-	"github.com/wraplink/dns-control/internal/backendregistry"
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/wraplink/dns-control/internal/agentregistry"
 	"github.com/wraplink/dns-control/internal/allocation"
+	"github.com/wraplink/dns-control/internal/backendregistry"
 	"github.com/wraplink/dns-control/internal/dns"
 	"github.com/wraplink/dns-control/internal/domain"
 	"github.com/wraplink/dns-control/internal/entitlement"
@@ -25,9 +24,9 @@ type Handler struct {
 	entitlements *entitlement.Store
 	token        string
 	resolver     *dns.Resolver
-	syncStatus   *DomainSyncStatus
-	backendRoutes *backendregistry.Client
-	router http.Handler
+	syncStatus     *DomainSyncStatus
+	backendRoutes  *backendregistry.Client
+	router         http.Handler
 }
 
 func NewHandler(
@@ -105,13 +104,16 @@ func (h *Handler) SyncActiveRoutes(ctx context.Context) {
 }
 
 func (h *Handler) RunRouteReporter(ctx context.Context, interval time.Duration) {
-	if interval <= 0 { interval = 10 * time.Second }
+	if interval <= 0 {
+		interval = 10 * time.Second
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		h.SyncActiveRoutes(ctx)
 		select {
-		case <-ctx.Done(): return
+		case <-ctx.Done():
+			return
 		case <-ticker.C:
 		}
 	}
