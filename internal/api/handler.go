@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"sync"
 	"net"
@@ -120,6 +121,10 @@ func (h *Handler) SyncActiveRoutes(ctx context.Context) {
 		}
 		previous.Active = false
 		if err := h.backendRoutes.ReportRouteActivation(ctx, previous); err != nil {
+			if errors.Is(err, backendregistry.ErrStaleAssignment) {
+				delete(h.reported, domain)
+				continue
+			}
 			log.Printf("backend route deactivation sync failed domain=%s generation=%d: %v", domain, previous.Generation, err)
 			continue
 		}
