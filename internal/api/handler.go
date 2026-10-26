@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
-	"sync"
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wraplink/dns-control/internal/agentregistry"
