@@ -9,6 +9,7 @@ GOARCH="${GOARCH:-$(go env GOARCH 2>/dev/null || uname -m)}"
 case "$GOARCH" in x86_64) GOARCH=amd64 ;; aarch64) GOARCH=arm64 ;; esac
 BIN="${BINARY_PATH:-$ROOT/bin/$APP_NAME-$GOOS-$GOARCH}"
 CONFIG=""
+ENV_FILE="$ROOT/.env"
 EXTRA=()
 
 usage() {
@@ -17,6 +18,7 @@ Usage: ./run.sh --config FILE [-- APP_ARGS...]
        ./run.sh FILE [-- APP_ARGS...]
 Options:
   -c, --config FILE  Configuration file path (required)
+  -e, --env-file FILE  Environment file (default: .env)
   -h, --help         Show help
 Environment: APP_NAME, GOOS, GOARCH, BINARY_PATH
 Run ./build.sh first if the executable is missing.
@@ -28,6 +30,10 @@ while (($#)); do
     -c|--config)
       (($# >= 2)) || { echo "Missing configuration file" >&2; exit 2; }
       CONFIG="$2"; shift 2 ;;
+    -e|--env-file)
+      (($# >= 2)) || { echo "Missing environment file" >&2; exit 2; }
+      ENV_FILE="$2"; shift 2 ;;
+    --env-file=*) ENV_FILE="${1#*=}"; shift ;;
     --config=*) CONFIG="${1#*=}"; shift ;;
     --) shift; EXTRA=("$@"); break ;;
     -h|--help) usage; exit 0 ;;
@@ -42,6 +48,12 @@ done
 [[ -f "$CONFIG" && -r "$CONFIG" ]] || { echo "Cannot read configuration: $CONFIG" >&2; exit 1; }
 CONFIG="$(realpath -- "$CONFIG")"
 [[ -f "$BIN" && -x "$BIN" ]] || { echo "Executable not found: $BIN (run ./build.sh)" >&2; exit 1; }
+
+[[ -f "$ENV_FILE" && -r "$ENV_FILE" ]] || { echo "Cannot read environment file: $ENV_FILE" >&2; exit 1; }
+# Only source environment files controlled by the operator.
+set -a
+source "$ENV_FILE"
+set +a
 
 echo "Starting $APP_NAME with config: $CONFIG"
 exec "$BIN" -config "$CONFIG" "${EXTRA[@]}"
