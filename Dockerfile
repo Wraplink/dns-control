@@ -11,7 +11,11 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -o /out/dns-control \
     ./cmd/dns-control
 
-FROM gcr.io/distroless/static-debian12
+FROM alpine:3.22
+RUN apk add --no-cache ca-certificates tzdata \
+    && addgroup -S -g 10001 app \
+    && adduser -S -D -H -u 10001 -G app app
+USER 10001:10001
 
 COPY --from=builder /out/dns-control /dns-control
 COPY config.yaml /etc/dns-control/config.yaml
