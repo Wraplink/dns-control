@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/wraplink/dns-control/internal/agentregistry"
+ "github.com/wraplink/dns-control/internal/alertreport"
 	"github.com/wraplink/dns-control/internal/allocation"
 	"github.com/wraplink/dns-control/internal/api"
 	"github.com/wraplink/dns-control/internal/backendregistry"
@@ -15,6 +16,10 @@ import (
 	"github.com/wraplink/dns-control/internal/domain"
 	"github.com/wraplink/dns-control/internal/entitlement"
 )
+
+var alerts = alertreport.FromEnv("dns-control")
+
+func reportAlert(code, summary string) { go func(){ _ = alerts.Send(code,"error",summary) }() }
 
 func main() {
 	configFile := flag.String("config", "config.yaml", "path to configuration file")
@@ -161,6 +166,7 @@ func refreshEntitlements(
 	snapshot, err := client.Fetch(ctx)
 	if err != nil {
 		log.Printf("backend entitlement refresh failed: %v", err)
+        reportAlert("entitlement_sync_failed","Backend entitlement refresh failed")
 		return
 	}
 
@@ -201,6 +207,7 @@ func registerDNSControl(
 	if err := client.Register(ctx, registration); err != nil {
 		log.Printf("backend DNS registration failed: %v", err)
 		status.Record(0, 0, err)
+        reportAlert("backend_registration_failed","Backend DNS registration failed")
 		return
 	}
 	refreshDomainPolicies(client, domains, allocations, status)
@@ -242,6 +249,7 @@ func refreshDomainPolicies(client *backendregistry.Client, domains *domain.Store
 	snapshot, err := client.FetchDomains(ctx)
 	if err != nil {
 		log.Printf("backend domain policy sync failed: %v", err)
+        reportAlert("domain_policy_sync_failed","Backend domain policy sync failed")
 		status.Record(0, 0, err)
 		return
 	}
