@@ -73,7 +73,7 @@ func TestManagedDNSPolicyMatrix(t *testing.T) {
 		{name: "specific IPv4 AAAA empty", rule: domain.Rule{Domain: "specific.example", Mode: domain.ModeSpecificIP, SpecificIP: "192.0.2.10"}, qtype: mdns.TypeAAAA, wantRcode: mdns.RcodeSuccess},
 		{name: "SNI unallocated fails closed", rule: domain.Rule{Domain: "sni.example", Mode: domain.ModeHijack}, qtype: mdns.TypeA, wantRcode: mdns.RcodeServerFailure},
 		{name: "SNI AAAA empty", rule: domain.Rule{Domain: "sni.example", Mode: domain.ModeHijack}, qtype: mdns.TypeAAAA, wantRcode: mdns.RcodeSuccess},
-		{name: "route unallocated fails closed", rule: domain.Rule{Domain: "route.example", Mode: domain.ModeRoute}, qtype: mdns.TypeA, wantRcode: mdns.RcodeServerFailure},
+		{name: "route unallocated fails closed", rule: domain.Rule{Domain: "route.example", Mode: domain.ModeRoute, Route: &domain.RoutePolicy{Protocol: "tcp_udp"}}, qtype: mdns.TypeA, wantRcode: mdns.RcodeServerFailure},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
