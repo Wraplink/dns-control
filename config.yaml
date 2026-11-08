@@ -2,7 +2,7 @@ dns:
   listen: ${DNS_LISTEN}
 
   upstream: [${DNS_UPSTREAM}]
-  ttl: 30
+  ttl: 10
   # Permit local dig @127.0.0.1 testing; remote clients remain entitlement-gated.
   allow_loopback_queries: true
   # Optional parent DNS Control, used when local upstream DNS fails.
@@ -16,7 +16,7 @@ api:
 agent:
   token: "${DNS_CONTROL_AGENT_TOKEN}"
   lease_duration: 30s
-  offline_after: 45s
+  offline_after: 30s
   reconcile_interval: 5s
 
 # Optional in development, required for paid-client DNS gating in production.
