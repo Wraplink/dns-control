@@ -46,6 +46,9 @@ func main() {
 	agentStore := agentregistry.NewStore()
  // Explicit opt-in until the Backend snapshot endpoint is deployed.
  authoritativeAgents := os.Getenv("WRAPLINK_BACKEND_AGENT_SNAPSHOT_ENABLED") == "true"
+ if authoritativeAgents && (!cfg.Backend.Enabled() || !cfg.Node.Enabled()) {
+  log.Fatal("backend agent snapshot synchronization requires backend and DNS node registration to be enabled")
+ }
 	syncStatus := &api.DomainSyncStatus{Enabled: cfg.Backend.Enabled() && cfg.Node.Enabled()}
 
 	var entitlementStore *entitlement.Store
