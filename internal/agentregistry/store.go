@@ -144,3 +144,23 @@ func (s *Store) List() []Agent {
 	})
 	return result
 }
+
+// ReplaceSnapshot atomically applies an authoritative agent inventory.
+// It preserves heartbeat timestamps from the source and never refreshes
+// health merely because a DNS node received a synchronization response.
+// Callers must validate snapshot revisions before invoking this method.
+func (s *Store) ReplaceSnapshot(snapshot []Agent) {
+ next := make(map[string]*Agent, len(snapshot))
+ for _, agent := range snapshot {
+  if strings.TrimSpace(agent.ID) == "" {
+   continue
+  }
+  copyAgent := agent
+  copyAgent.Diagnostics.AdvertisedIPs = append([]string(nil), agent.Diagnostics.AdvertisedIPs...)
+  copyAgent.Diagnostics.UpstreamDNS = append([]string(nil), agent.Diagnostics.UpstreamDNS...)
+  next[agent.ID] = &copyAgent
+ }
+ s.mu.Lock()
+ s.agents = next
+ s.mu.Unlock()
+}
