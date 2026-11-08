@@ -305,7 +305,16 @@ func (h *Handler) handleSpecificIP(w mdns.ResponseWriter, req *mdns.Msg, address
 	_ = w.WriteMsg(resp)
 }
 
-// healthyAgent rejects stale or offline allocations at query time, even before the\n// periodic offline sweeper runs. Never publish an allocation without a registry.
+// healthyAgent rejects stale or offline allocations at query time, even before the
+// periodic offline sweeper runs. Never publish an allocation without a registry.
+// SetAgentMaxAge aligns DNS query-time health checks with the configured
+// offline timeout rather than relying on a hard-coded duration.
+func (h *Handler) SetAgentMaxAge(age time.Duration) {
+ if age > 0 {
+  h.agentMaxAge = age
+ }
+}
+
 func (h *Handler) healthyAgent(id string, leaseType allocation.Type) bool {
 	if h.agents == nil {
 		return false
