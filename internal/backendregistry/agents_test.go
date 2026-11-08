@@ -34,3 +34,16 @@ func TestFetchAgentsRejectsMissingRevision(t *testing.T) {
  _, err := NewClient(server.URL, "key").FetchAgents(context.Background())
  if err == nil { t.Fatal("snapshot without revision must be rejected") }
 }
+
+func TestFetchAgentsRejectsMalformedHealth(t *testing.T) {
+ for _, body := range []string{
+  `{"revision":1,"agents":[{"id":"edge","status":"online"}]}`,
+  `{"revision":1,"agents":[{"id":"edge","status":"unknown","last_seen_at":"2026-11-08T10:00:00Z"}]}`,
+  `{"revision":1,"agents":[{"id":"edge","status":"online","last_seen_at":"2026-11-08T10:00:00Z"},{"id":"edge","status":"offline","last_seen_at":"2026-11-08T10:00:00Z"}]}`,
+ } {
+  server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(body)) }))
+  _, err := NewClient(server.URL, "key").FetchAgents(context.Background())
+  server.Close()
+  if err == nil { t.Fatalf("malformed snapshot accepted: %s", body) }
+ }
+}
