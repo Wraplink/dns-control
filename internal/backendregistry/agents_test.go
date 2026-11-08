@@ -47,3 +47,42 @@ func TestFetchAgentsRejectsMalformedHealth(t *testing.T) {
   if err == nil { t.Fatalf("malformed snapshot accepted: %s", body) }
  }
 }
+
+func TestFetchAgentsPaginated(t *testing.T) {
+ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+  if r.URL.Query().Get("cursor") == "" {
+   _, _ = w.Write([]byte(`{"revision":11,"agents":[{"id":"edge-a","status":"online","last_seen_at":"2026-11-08T10:00:00Z"}],"next_cursor":"page-2"}`))
+  } else {
+   _, _ = w.Write([]byte(`{"revision":11,"agents":[{"id":"edge-b","status":"offline","last_seen_at":"2026-11-08T10:00:00Z"}]}`))
+  }
+ }))
+ defer server.Close()
+ snapshot, err := NewClient(server.URL, "key").FetchAgents(context.Background())
+ if err != nil || snapshot.Revision != 11 || len(snapshot.Agents) != 2 {
+  t.Fatalf("unexpected paginated result: %+v, %v", snapshot, err)
+ }
+}
+
+func TestFetchAgentsRejectsRevisionChangeAcrossPages(t *testing.T) {
+ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+  if r.URL.Query().Get("cursor") == "" {
+   _, _ = w.Write([]byte(`{"revision":11,"agents":[],"next_cursor":"next"}`))
+  } else {
+   _, _ = w.Write([]byte(`{"revision":12,"agents":[]}`))
+  }
+ }))
+ defer server.Close()
+ if _, err := NewClient(server.URL, "key").FetchAgents(context.Background()); err == nil {
+  t.Fatal("mixed-revision pages must not produce a snapshot")
+ }
+}
+
+func TestFetchAgentsRejectsCursorCycle(t *testing.T) {
+ server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+  _, _ = w.Write([]byte(`{"revision":11,"agents":[],"next_cursor":"same"}`))
+ }))
+ defer server.Close()
+ if _, err := NewClient(server.URL, "key").FetchAgents(context.Background()); err == nil {
+  t.Fatal("cyclic pagination must fail")
+ }
+}
