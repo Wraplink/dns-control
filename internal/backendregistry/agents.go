@@ -6,6 +6,7 @@ import (
  "fmt"
  "io"
  "net/http"
+ "strings"
 
  "github.com/wraplink/dns-control/internal/agentregistry"
 )
@@ -36,6 +37,15 @@ func (c *Client) FetchAgents(ctx context.Context) (AgentSnapshot, error) {
  }
  if snapshot.Revision == 0 || snapshot.Agents == nil {
   return AgentSnapshot{}, fmt.Errorf("invalid agent snapshot: missing revision or agents")
+ }
+ seen := make(map[string]struct{}, len(snapshot.Agents))
+ for _, agent := range snapshot.Agents {
+  id := strings.TrimSpace(agent.ID)
+  if id == "" || agent.LastSeenAt.IsZero() || (agent.Status != agentregistry.StatusOnline && agent.Status != agentregistry.StatusOffline) {
+   return AgentSnapshot{}, fmt.Errorf("invalid agent snapshot: malformed agent record")
+  }
+  if _, exists := seen[id]; exists { return AgentSnapshot{}, fmt.Errorf("invalid agent snapshot: duplicate agent ID") }
+  seen[id] = struct{}{}
  }
  return snapshot, nil
 }
