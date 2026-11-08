@@ -39,6 +39,7 @@ type Agent struct {
 type Store struct {
 	mu     sync.RWMutex
 	agents map[string]*Agent
+	revision uint64
 }
 
 func NewStore() *Store {
@@ -163,4 +164,31 @@ func (s *Store) ReplaceSnapshot(snapshot []Agent) {
  s.mu.Lock()
  s.agents = next
  s.mu.Unlock()
+}
+
+// ReplaceVersionedSnapshot applies only newer authoritative revisions.
+// The revision and agents are committed under one lock so concurrent DNS
+// refreshes cannot overwrite newer inventory with older responses.
+func (s *Store) ReplaceVersionedSnapshot(revision uint64, snapshot []Agent) bool {
+ if revision == 0 {
+  return false
+ }
+ next := make(map[string]*Agent, len(snapshot))
+ for _, agent := range snapshot {
+  if strings.TrimSpace(agent.ID) == "" {
+   continue
+  }
+  copyAgent := agent
+  copyAgent.Diagnostics.AdvertisedIPs = append([]string(nil), agent.Diagnostics.AdvertisedIPs...)
+  copyAgent.Diagnostics.UpstreamDNS = append([]string(nil), agent.Diagnostics.UpstreamDNS...)
+  next[agent.ID] = &copyAgent
+ }
+ s.mu.Lock()
+ defer s.mu.Unlock()
+ if revision <= s.revision {
+  return false
+ }
+ s.agents = next
+ s.revision = revision
+ return true
 }
