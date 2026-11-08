@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"strings"
+	"time"
 
 	mdns "github.com/miekg/dns"
 
@@ -20,6 +21,7 @@ type Handler struct {
 	allocations          *allocation.Store
 	entitlements         *entitlement.Store
 	ttl                  uint32
+	agentMaxAge          time.Duration
 	allowLoopbackQueries bool
 }
 
@@ -37,6 +39,7 @@ func NewHandler(
 		allocations:  allocations,
 		entitlements: entitlements,
 		ttl:          ttl,
+		agentMaxAge: 30 * time.Second,
 	}
 	if len(agents) > 0 {
 		h.agents = agents[0]
@@ -302,13 +305,13 @@ func (h *Handler) handleSpecificIP(w mdns.ResponseWriter, req *mdns.Msg, address
 	_ = w.WriteMsg(resp)
 }
 
-// healthyAgent rejects stale or offline allocations when an agent registry is attached.
+// healthyAgent rejects stale or offline allocations at query time, even before the\n// periodic offline sweeper runs. Never publish an allocation without a registry.
 func (h *Handler) healthyAgent(id string, leaseType allocation.Type) bool {
 	if h.agents == nil {
-		return true
+		return false
 	}
 	agent, ok := h.agents.Get(id)
-	if !ok || agent.Status != agentregistry.StatusOnline {
+	if !ok || agent.Status != agentregistry.StatusOnline || agent.LastSeenAt.IsZero() || time.Since(agent.LastSeenAt) > h.agentMaxAge {
 		return false
 	}
 	switch leaseType {
