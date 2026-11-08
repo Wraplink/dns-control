@@ -46,6 +46,12 @@ func main() {
 	agentStore := agentregistry.NewStore()
  // Explicit opt-in until the Backend snapshot endpoint is deployed.
  authoritativeAgents := os.Getenv("WRAPLINK_BACKEND_AGENT_SNAPSHOT_ENABLED") == "true"
+ dnsAgentStore := agentStore
+ if authoritativeAgents {
+  // DNS answers use an isolated Backend-owned health view; local agent
+  // polling must not refresh authoritative heartbeat timestamps.
+  dnsAgentStore = agentregistry.NewStore()
+ }
  if authoritativeAgents && (!cfg.Backend.Enabled() || !cfg.Node.Enabled()) {
   log.Fatal("backend agent snapshot synchronization requires backend and DNS node registration to be enabled")
  }
@@ -76,8 +82,8 @@ func main() {
 				cfg.Backend.ControlKey,
 			)
 			if authoritativeAgents {
-    refreshAgentSnapshot(registryClient, agentStore)
-    go runAgentSnapshotSync(registryClient, agentStore, cfg.Agent.ReconcileInterval)
+    refreshAgentSnapshot(registryClient, dnsAgentStore)
+    go runAgentSnapshotSync(registryClient, dnsAgentStore, cfg.Agent.ReconcileInterval)
    }
    registration := backendregistry.RegisterRequest{
 				ID:        cfg.Node.ID,
@@ -117,7 +123,7 @@ func main() {
 		allocationStore,
 		entitlementStore,
 		cfg.DNS.TTL,
-		agentStore,
+		dnsAgentStore,
 	)
 	dnsHandler.SetAgentMaxAge(cfg.Agent.OfflineAfter)
 	dnsHandler.SetAllowLoopbackQueries(cfg.DNS.AllowLoopbackQueries)
