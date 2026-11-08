@@ -24,3 +24,23 @@ func TestReplaceSnapshotPreservesHealthAndRemovesMissing(t *testing.T) {
   t.Fatal("snapshot must be copied, not aliased")
  }
 }
+
+func TestReplaceVersionedSnapshotRejectsOutOfOrder(t *testing.T) {
+ store := NewStore()
+ fresh := []Agent{{ID: "new", Status: StatusOnline, LastSeenAt: time.Now().UTC(), Capacity: Capacity{SNI: 2}}}
+ if !store.ReplaceVersionedSnapshot(10, fresh) {
+  t.Fatal("newer revision should apply")
+ }
+ if store.ReplaceVersionedSnapshot(9, []Agent{{ID: "stale", Status: StatusOnline}}) {
+  t.Fatal("older revision must be rejected")
+ }
+ if store.ReplaceVersionedSnapshot(10, nil) {
+  t.Fatal("duplicate revision must be rejected")
+ }
+ if _, ok := store.Get("new"); !ok {
+  t.Fatal("newer agent inventory was lost")
+ }
+ if _, ok := store.Get("stale"); ok {
+  t.Fatal("stale snapshot overwrote newer inventory")
+ }
+}
