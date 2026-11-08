@@ -109,6 +109,7 @@ func main() {
 		cfg.DNS.TTL,
 		agentStore,
 	)
+	dnsHandler.SetAgentMaxAge(cfg.Agent.OfflineAfter)
 	dnsHandler.SetAllowLoopbackQueries(cfg.DNS.AllowLoopbackQueries)
 	dnsServer := dns.NewServer(cfg.DNS.Listen, dnsHandler)
 
