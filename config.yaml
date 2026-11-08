@@ -14,7 +14,7 @@ api:
   listen: ${API_LISTEN}
 
 agent:
-  token: "CHANGE-ME"
+  token: "${DNS_CONTROL_AGENT_TOKEN}"
   lease_duration: 30s
   offline_after: 45s
   reconcile_interval: 5s
@@ -31,9 +31,9 @@ backend:
 # When configured, this dns-control instance registers/heartbeats these addresses
 # to backend, which selects two healthy addresses for the web connection page.
 node:
-  id: "dns-fra-01"
-  region: "eu-central"
+  id: "${NODE_ID}"
+  region: "${NODE_REGION}"
   public_dns:
-    - 192.168.108.134
+    - "${NODE_PUBLIC_IP}"
   register_interval: 15s
 
