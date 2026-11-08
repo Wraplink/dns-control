@@ -44,3 +44,17 @@ func TestReplaceVersionedSnapshotRejectsOutOfOrder(t *testing.T) {
   t.Fatal("stale snapshot overwrote newer inventory")
  }
 }
+
+func TestRegistryReadsDoNotExposeMutableSnapshotSlices(t *testing.T) {
+ store := NewStore()
+ store.ReplaceVersionedSnapshot(1, []Agent{{ID:"edge", Status:StatusOnline, LastSeenAt:time.Now(), Diagnostics:Diagnostics{AdvertisedIPs:[]string{"192.0.2.10"}, UpstreamDNS:[]string{"1.1.1.1"}}}})
+ agent, ok := store.Get("edge")
+ if !ok { t.Fatal("missing agent") }
+ agent.Diagnostics.AdvertisedIPs[0] = "192.0.2.20"
+ listed := store.List()
+ listed[0].Diagnostics.UpstreamDNS[0] = "9.9.9.9"
+ again, _ := store.Get("edge")
+ if again.Diagnostics.AdvertisedIPs[0] != "192.0.2.10" || again.Diagnostics.UpstreamDNS[0] != "1.1.1.1" {
+  t.Fatal("registry health data mutated through read result")
+ }
+}
