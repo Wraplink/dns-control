@@ -146,6 +146,11 @@ type Handler struct {
 type writer struct {
 	mdns.ResponseWriter
 	rcode int
+	mode string
+}
+
+func (w *writer) SetResolutionMode(mode string) {
+	w.mode = mode
 }
 
 func (w *writer) WriteMsg(m *mdns.Msg) error {
@@ -175,6 +180,9 @@ func (h Handler) ServeDNS(w mdns.ResponseWriter, req *mdns.Msg) {
 	if rcode == "" {
 		rcode = fmt.Sprintf("RCODE%d", wrapped.rcode)
 	}
+	if wrapped.mode == "" {
+		wrapped.mode = "normal"
+	}
 	elapsed := time.Since(start).Milliseconds()
 	if elapsed > 600000 {
 		elapsed = 600000
@@ -185,7 +193,7 @@ func (h Handler) ServeDNS(w mdns.ResponseWriter, req *mdns.Msg) {
 		Domain:         domain,
 		QType:          qtype,
 		RCode:          rcode,
-		ResolutionMode: "observed",
+		ResolutionMode: wrapped.mode,
 		DurationMS:     int(elapsed),
 	})
 }
