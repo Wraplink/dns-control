@@ -61,7 +61,7 @@ func (r *Reporter) Dropped() uint64 {
 
 func (r *Reporter) send(ctx context.Context, events []Event) error {
 	payload, err := json.Marshal(struct {
-		ControllerID string `json:"controller_id"`
+		ControllerID string  `json:"controller_id"`
 		Events       []Event `json:"events"`
 	}{r.id, events})
 	if err != nil {
