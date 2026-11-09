@@ -20,7 +20,7 @@ func TestReporterSendsBatchWithControlKey(t *testing.T) {
 			t.Errorf("unexpected request path or control key")
 		}
 		var batch struct {
-			ControllerID string `json:"controller_id"`
+			ControllerID string  `json:"controller_id"`
 			Events       []Event `json:"events"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
@@ -70,7 +70,7 @@ type responseWriter struct {
 	msg *mdns.Msg
 }
 
-func (w *responseWriter) LocalAddr() net.Addr { return &net.UDPAddr{} }
+func (w *responseWriter) LocalAddr() net.Addr  { return &net.UDPAddr{} }
 func (w *responseWriter) RemoteAddr() net.Addr { return &net.UDPAddr{} }
 func (w *responseWriter) WriteMsg(msg *mdns.Msg) error {
 	w.msg = msg
