@@ -3,9 +3,9 @@ package queryreport
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
-	"net"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -69,14 +69,18 @@ func TestQueueOverflowDoesNotBlock(t *testing.T) {
 type responseWriter struct {
 	msg *mdns.Msg
 }
-func (w *responseWriter) LocalAddr() net.Addr { return &net.UDPAddr{} }
+
+func (w *responseWriter) LocalAddr() net.Addr  { return &net.UDPAddr{} }
 func (w *responseWriter) RemoteAddr() net.Addr { return &net.UDPAddr{} }
-func (w *responseWriter) WriteMsg(msg *mdns.Msg) error { w.msg = msg; return nil }
-func (w *responseWriter) Write([]byte) (int,error) { return 0,nil }
-func (w *responseWriter) Close() error { return nil }
-func (w *responseWriter) TsigStatus() error { return nil }
-func (w *responseWriter) TsigTimersOnly(bool) {}
-func (w *responseWriter) Hijack() {}
+func (w *responseWriter) WriteMsg(msg *mdns.Msg) error {
+	w.msg = msg
+	return nil
+}
+func (w *responseWriter) Write([]byte) (int, error) { return 0, nil }
+func (w *responseWriter) Close() error               { return nil }
+func (w *responseWriter) TsigStatus() error          { return nil }
+func (w *responseWriter) TsigTimersOnly(bool)       {}
+func (w *responseWriter) Hijack()                    {}
 
 func TestHandlerCapturesRefused(t *testing.T) {
 	reporter := New("http://127.0.0.1:1", "secret", "dns-01", 2)
