@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+ mdns "github.com/miekg/dns"
 	"flag"
 	"log"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/wraplink/dns-control/internal/dns"
 	"github.com/wraplink/dns-control/internal/domain"
 	"github.com/wraplink/dns-control/internal/entitlement"
+ "github.com/wraplink/dns-control/internal/queryreport"
 )
 
 var alerts = alertreport.FromEnv("dns-control")
@@ -127,7 +129,14 @@ func main() {
 	)
 	dnsHandler.SetAgentMaxAge(cfg.Agent.OfflineAfter)
 	dnsHandler.SetAllowLoopbackQueries(cfg.DNS.AllowLoopbackQueries)
-	dnsServer := dns.NewServer(cfg.DNS.Listen, dnsHandler)
+	var servingHandler mdns.Handler = dnsHandler
+ if cfg.Backend.Enabled() && cfg.Node.Enabled() && os.Getenv("WRAPLINK_DNS_QUERY_REPORT_ENABLED")=="true" {
+  reporter:=queryreport.New(cfg.Backend.URL,cfg.Backend.ControlKey,cfg.Node.ID,8192)
+  go reporter.Run(context.Background())
+  servingHandler=queryreport.Handler{Next:dnsHandler,Reporter:reporter}
+  log.Printf("dns query reporting enabled controller=%s",cfg.Node.ID)
+ }
+ dnsServer := dns.NewServer(cfg.DNS.Listen, servingHandler)
 
 	var routeReporter *backendregistry.Client
 	if cfg.Backend.Enabled() && cfg.Node.Enabled() {
