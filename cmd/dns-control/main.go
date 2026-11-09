@@ -320,7 +320,7 @@ func logDNSQueryReportStats(reporter *queryreport.Reporter, interval time.Durati
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
-		log.Printf("dns query reporting stats delivered=%d failed_batches=%d dropped=%d",
-			reporter.Delivered(), reporter.FailedBatches(), reporter.Dropped())
+		log.Printf("dns query reporting stats delivered=%d failed_batches=%d dropped=%d pending=%d",
+			reporter.Delivered(), reporter.FailedBatches(), reporter.Dropped(), reporter.Pending())
 	}
 }
