@@ -134,6 +134,7 @@ func main() {
 	if cfg.Backend.Enabled() && cfg.Node.Enabled() && os.Getenv("WRAPLINK_DNS_QUERY_REPORT_ENABLED") == "true" {
 		reporter := queryreport.New(cfg.Backend.URL, cfg.Backend.ControlKey, cfg.Node.ID, 8192)
 		go reporter.Run(context.Background())
+		go logDNSQueryReportStats(reporter, time.Minute)
 		servingHandler = queryreport.Handler{Next: dnsHandler, Reporter: reporter}
 		log.Printf("dns query reporting enabled controller=%s", cfg.Node.ID)
 	}
@@ -310,5 +311,16 @@ func refreshAgentSnapshot(client *backendregistry.Client, store *agentregistry.S
 	}
 	if store.ReplaceVersionedSnapshot(snapshot.Revision, snapshot.Agents) {
 		log.Printf("backend agent snapshot synchronized revision=%d agents=%d", snapshot.Revision, len(snapshot.Agents))
+	}
+}
+
+// logDNSQueryReportStats reports cumulative delivery health without logging
+// query names or client identifiers.
+func logDNSQueryReportStats(reporter *queryreport.Reporter, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		log.Printf("dns query reporting stats delivered=%d failed_batches=%d dropped=%d",
+			reporter.Delivered(), reporter.FailedBatches(), reporter.Dropped())
 	}
 }
