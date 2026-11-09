@@ -319,3 +319,15 @@ func TestPendingCountsQueuedAndDroppedEvents(t *testing.T) {
 		t.Fatalf("pending=%d dropped=%d", reporter.Pending(), reporter.Dropped())
 	}
 }
+
+func TestReporterShutdownAccountsForUndeliveredEvents(t *testing.T) {
+	reporter := New("http://127.0.0.1:1", "secret", "dns-01", 4)
+	reporter.Enqueue(Event{EventID: "one"})
+	reporter.Enqueue(Event{EventID: "two"})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	reporter.Run(ctx)
+	if reporter.Pending() != 0 || reporter.Dropped() != 2 || reporter.Delivered() != 0 {
+		t.Fatalf("pending=%d dropped=%d delivered=%d", reporter.Pending(), reporter.Dropped(), reporter.Delivered())
+	}
+}
