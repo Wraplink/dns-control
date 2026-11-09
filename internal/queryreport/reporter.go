@@ -61,7 +61,7 @@ func (r *Reporter) Dropped() uint64 {
 
 func (r *Reporter) send(ctx context.Context, events []Event) error {
 	payload, err := json.Marshal(struct {
-		ControllerID string  `json:"controller_id"`
+		ControllerID string `json:"controller_id"`
 		Events       []Event `json:"events"`
 	}{r.id, events})
 	if err != nil {
@@ -171,8 +171,12 @@ func (h Handler) ServeDNS(w mdns.ResponseWriter, req *mdns.Msg) {
 		elapsed = 600000
 	}
 	h.Reporter.Enqueue(Event{
-		EventID: uuid.NewString(), ObservedAt: start.UTC(),
-		Domain: domain, QType: qtype, RCode: rcode,
-		ResolutionMode: "observed", DurationMS: int(elapsed),
+		EventID:        uuid.NewString(),
+		ObservedAt:     start.UTC(),
+		Domain:         domain,
+		QType:          qtype,
+		RCode:          rcode,
+		ResolutionMode: "observed",
+		DurationMS:     int(elapsed),
 	})
 }
