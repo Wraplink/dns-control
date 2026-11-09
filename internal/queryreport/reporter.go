@@ -146,7 +146,7 @@ type Handler struct {
 type writer struct {
 	mdns.ResponseWriter
 	rcode int
-	mode string
+	mode  string
 }
 
 func (w *writer) SetResolutionMode(mode string) {
