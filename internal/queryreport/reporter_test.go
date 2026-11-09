@@ -272,7 +272,14 @@ func TestReporterRetryableHTTPStatuses(t *testing.T) {
 	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			var calls atomic.Int32
+			var wrongID atomic.Bool
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var batch struct {
+					Events []Event `json:"events"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&batch); err != nil || len(batch.Events) != 1 || batch.Events[0].EventID != "retry-id" {
+					wrongID.Store(true)
+				}
 				if calls.Add(1) == 1 {
 					w.WriteHeader(status)
 					return
@@ -301,7 +308,7 @@ func TestReporterRetryableHTTPStatuses(t *testing.T) {
 			}
 			cancel()
 			<-done
-			if calls.Load() != 2 || reporter.Dropped() != 0 || reporter.FailedBatches() != 1 {
+			if calls.Load() != 2 || wrongID.Load() || reporter.Dropped() != 0 || reporter.FailedBatches() != 1 || reporter.Pending() != 0 {
 				t.Fatalf("calls=%d dropped=%d failed=%d", calls.Load(), reporter.Dropped(), reporter.FailedBatches())
 			}
 		})
