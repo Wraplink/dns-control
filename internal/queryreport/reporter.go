@@ -61,10 +61,11 @@ func New(url, key, id string, capacity int) *Reporter {
 }
 
 func (r *Reporter) Enqueue(e Event) {
+	r.pendingEvents.Add(1)
 	select {
 	case r.queue <- e:
-		r.pendingEvents.Add(1)
 	default:
+		r.pendingEvents.Add(-1)
 		r.dropped.Add(1)
 	}
 }
