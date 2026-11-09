@@ -5,6 +5,7 @@ import (
 
 	mdns "github.com/miekg/dns"
 
+	"github.com/wraplink/dns-control/internal/agentregistry"
 	"github.com/wraplink/dns-control/internal/allocation"
 	"github.com/wraplink/dns-control/internal/domain"
 )
@@ -29,7 +30,9 @@ func TestHijackUsesParentDomainAllocationForSubdomains(t *testing.T) {
 		t.Fatal("failed to activate SNI lease")
 	}
 
-	handler := NewHandler(nil, rules, allocations, nil, 30)
+	agents := agentregistry.NewStore()
+	agents.Upsert("edge-agent-01", "test", agentregistry.Capacity{SNI: 1})
+	handler := NewHandler(nil, rules, allocations, nil, 30, agents)
 	for _, hostname := range []string{
 		"playstation.com.",
 		"www.playstation.com.",

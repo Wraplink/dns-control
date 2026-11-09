@@ -37,8 +37,9 @@ type Agent struct {
 }
 
 type Store struct {
-	mu     sync.RWMutex
-	agents map[string]*Agent
+	mu       sync.RWMutex
+	agents   map[string]*Agent
+	revision uint64
 }
 
 func NewStore() *Store {
@@ -112,7 +113,7 @@ func (s *Store) Get(id string) (Agent, bool) {
 	if !ok {
 		return Agent{}, false
 	}
-	return *agent, true
+	return cloneAgent(*agent), true
 }
 
 func (s *Store) MarkOfflineBefore(cutoff time.Time) int {
@@ -136,11 +137,64 @@ func (s *Store) List() []Agent {
 
 	result := make([]Agent, 0, len(s.agents))
 	for _, agent := range s.agents {
-		result = append(result, *agent)
+		result = append(result, cloneAgent(*agent))
 	}
 
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].ID < result[j].ID
 	})
 	return result
+}
+
+// ReplaceSnapshot atomically applies an authoritative agent inventory.
+// It preserves heartbeat timestamps from the source and never refreshes
+// health merely because a DNS node received a synchronization response.
+// Callers must validate snapshot revisions before invoking this method.
+func (s *Store) ReplaceSnapshot(snapshot []Agent) {
+	next := make(map[string]*Agent, len(snapshot))
+	for _, agent := range snapshot {
+		if strings.TrimSpace(agent.ID) == "" {
+			continue
+		}
+		copyAgent := agent
+		copyAgent.Diagnostics.AdvertisedIPs = append([]string(nil), agent.Diagnostics.AdvertisedIPs...)
+		copyAgent.Diagnostics.UpstreamDNS = append([]string(nil), agent.Diagnostics.UpstreamDNS...)
+		next[agent.ID] = &copyAgent
+	}
+	s.mu.Lock()
+	s.agents = next
+	s.mu.Unlock()
+}
+
+// ReplaceVersionedSnapshot applies only newer authoritative revisions.
+// The revision and agents are committed under one lock so concurrent DNS
+// refreshes cannot overwrite newer inventory with older responses.
+func (s *Store) ReplaceVersionedSnapshot(revision uint64, snapshot []Agent) bool {
+	if revision == 0 {
+		return false
+	}
+	next := make(map[string]*Agent, len(snapshot))
+	for _, agent := range snapshot {
+		if strings.TrimSpace(agent.ID) == "" {
+			continue
+		}
+		copyAgent := agent
+		copyAgent.Diagnostics.AdvertisedIPs = append([]string(nil), agent.Diagnostics.AdvertisedIPs...)
+		copyAgent.Diagnostics.UpstreamDNS = append([]string(nil), agent.Diagnostics.UpstreamDNS...)
+		next[agent.ID] = &copyAgent
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if revision <= s.revision {
+		return false
+	}
+	s.agents = next
+	s.revision = revision
+	return true
+}
+
+func cloneAgent(agent Agent) Agent {
+	agent.Diagnostics.AdvertisedIPs = append([]string(nil), agent.Diagnostics.AdvertisedIPs...)
+	agent.Diagnostics.UpstreamDNS = append([]string(nil), agent.Diagnostics.UpstreamDNS...)
+	return agent
 }

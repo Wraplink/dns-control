@@ -7,6 +7,7 @@ import (
 
 	mdns "github.com/miekg/dns"
 
+	"github.com/wraplink/dns-control/internal/agentregistry"
 	"github.com/wraplink/dns-control/internal/allocation"
 	"github.com/wraplink/dns-control/internal/domain"
 	"github.com/wraplink/dns-control/internal/entitlement"
@@ -75,7 +76,9 @@ func TestPerClientModeChangesActualDNSAnswer(t *testing.T) {
 		{ClientIP: "203.0.113.12", ConnectionMode: "smart", RemainingBytes: 1000, ExpiresAt: expires},
 	}})
 
-	handler := NewHandler(NewResolver([]string{packetConn.LocalAddr().String()}), rules, leases, access, 30)
+	agents := agentregistry.NewStore()
+	agents.Upsert("test-edge", "test", agentregistry.Capacity{SNI: 1})
+	handler := NewHandler(NewResolver([]string{packetConn.LocalAddr().String()}), rules, leases, access, 30, agents)
 	for _, tc := range []struct {
 		client, want string
 	}{
