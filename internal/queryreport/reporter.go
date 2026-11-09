@@ -44,6 +44,7 @@ type Reporter struct {
 	dropped       atomic.Uint64
 	delivered     atomic.Uint64
 	failedBatches atomic.Uint64
+	pendingEvents atomic.Int64
 }
 
 func New(url, key, id string, capacity int) *Reporter {
@@ -62,6 +63,7 @@ func New(url, key, id string, capacity int) *Reporter {
 func (r *Reporter) Enqueue(e Event) {
 	select {
 	case r.queue <- e:
+		r.pendingEvents.Add(1)
 	default:
 		r.dropped.Add(1)
 	}
@@ -79,6 +81,11 @@ func (r *Reporter) Delivered() uint64 {
 // FailedBatches returns the number of failed delivery attempts.
 func (r *Reporter) FailedBatches() uint64 {
 	return r.failedBatches.Load()
+}
+
+// Pending returns events waiting in the channel or active delivery batch.
+func (r *Reporter) Pending() int64 {
+	return r.pendingEvents.Load()
 }
 
 func (r *Reporter) send(ctx context.Context, events []Event) error {
@@ -127,6 +134,7 @@ func (r *Reporter) Run(ctx context.Context) {
 		cancel()
 		if err == nil {
 			r.delivered.Add(uint64(len(pending)))
+			r.pendingEvents.Add(-int64(len(pending)))
 			pending = pending[:0]
 			failures = 0
 			nextRetry = time.Time{}
@@ -136,6 +144,7 @@ func (r *Reporter) Run(ctx context.Context) {
 		var permanent permanentDeliveryError
 		if errors.As(err, &permanent) {
 			r.dropped.Add(uint64(len(pending)))
+			r.pendingEvents.Add(-int64(len(pending)))
 			log.Printf("dns query reporting rejected batch permanently (HTTP %d, dropped %d); verify Backend authentication and schema", permanent.status, len(pending))
 			pending = pending[:0]
 			failures = 0
