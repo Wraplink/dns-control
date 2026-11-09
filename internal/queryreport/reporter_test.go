@@ -79,7 +79,7 @@ func (w *responseWriter) WriteMsg(msg *mdns.Msg) error {
 func (w *responseWriter) Write([]byte) (int, error) { return 0, nil }
 func (w *responseWriter) Close() error              { return nil }
 func (w *responseWriter) TsigStatus() error         { return nil }
-func (w *responseWriter) TsigTimersOnly(bool)      {}
+func (w *responseWriter) TsigTimersOnly(bool)       {}
 func (w *responseWriter) Hijack()                   {}
 
 func TestHandlerCapturesRefused(t *testing.T) {
