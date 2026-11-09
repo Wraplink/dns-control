@@ -64,6 +64,7 @@ func (h *Handler) ServeDNS(
 	// A configured control plane is an allowlist: unauthorized clients must
 	// receive no recursive or managed DNS answers.
 	if h.entitlements != nil && !h.entitlements.Allowed(responseWriterIPv4(w)) && !(h.allowLoopbackQueries && isLoopbackDNSClient(w)) {
+		setResolutionMode(w, "refused")
 		resp := new(mdns.Msg)
 		resp.SetRcode(req, mdns.RcodeRefused)
 		_ = w.WriteMsg(resp)
@@ -75,6 +76,7 @@ func (h *Handler) ServeDNS(
 	rule, matched := h.domains.Match(domainName)
 
 	if !matched || rule.Mode == domain.ModeNormal {
+		setResolutionMode(w, "normal")
 		h.handleNormal(w, req)
 		return
 	}
@@ -82,17 +84,20 @@ func (h *Handler) ServeDNS(
 	if h.entitlements != nil && !(h.allowLoopbackQueries && isLoopbackDNSClient(w)) {
 		entitlement, allowed := h.entitlements.Get(responseWriterIPv4(w))
 		if !allowed {
+			setResolutionMode(w, "servfail")
 			h.serverFailure(w, req)
 			return
 		}
 		if !rule.AppliesTo(entitlement.ConnectionMode) {
 			// This client selected another profile. Return the ordinary
 			// upstream DNS answer; never apply someone else's mode.
+			setResolutionMode(w, "normal")
 			h.handleNormal(w, req)
 			return
 		}
 	}
 
+	setResolutionMode(w, string(rule.Mode))
 	switch rule.Mode {
 	case domain.ModeBlock:
 		resp := new(mdns.Msg)
@@ -105,6 +110,7 @@ func (h *Handler) ServeDNS(
 	case domain.ModeSpecificIP:
 		h.handleSpecificIP(w, req, rule.SpecificIP)
 	default:
+		setResolutionMode(w, "normal")
 		log.Printf(
 			"dns: unsupported mode=%q domain=%q",
 			rule.Mode,
@@ -349,4 +355,12 @@ func isLoopbackDNSClient(w mdns.ResponseWriter) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
+}
+
+// setResolutionMode lets an optional telemetry response writer record the policy
+// selected for this request without coupling DNS serving to the reporter.
+func setResolutionMode(w mdns.ResponseWriter, mode string) {
+	if reporter, ok := w.(interface{ SetResolutionMode(string) }); ok {
+		reporter.SetResolutionMode(mode)
+	}
 }
