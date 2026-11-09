@@ -158,7 +158,7 @@ func TestReporterRetriesFailedBatchWithSameEventID(t *testing.T) {
 	}
 	cancel()
 	<-done
-	if calls.Load() < 2 || reporter.Dropped() != 0 || reporter.Delivered() != 1 || reporter.FailedBatches() != 1 {
+	if calls.Load() < 2 || reporter.Dropped() != 0 || reporter.Delivered() != 1 || reporter.FailedBatches() != 1 || reporter.Pending() != 0 {
 		t.Fatalf("calls=%d dropped=%d delivered=%d failed=%d", calls.Load(), reporter.Dropped(), reporter.Delivered(), reporter.FailedBatches())
 	}
 }
@@ -263,7 +263,7 @@ func TestReporterPermanentRejectionDropsBatchAndContinues(t *testing.T) {
 	}
 	cancel()
 	<-done
-	if reporter.Dropped() != 1 || reporter.Delivered() != 1 || reporter.FailedBatches() != 1 || calls.Load() != 2 {
+	if reporter.Dropped() != 1 || reporter.Delivered() != 1 || reporter.FailedBatches() != 1 || reporter.Pending() != 0 || calls.Load() != 2 {
 		t.Fatalf("dropped=%d delivered=%d failed=%d calls=%d", reporter.Dropped(), reporter.Delivered(), reporter.FailedBatches(), calls.Load())
 	}
 }
@@ -305,5 +305,17 @@ func TestReporterRetryableHTTPStatuses(t *testing.T) {
 				t.Fatalf("calls=%d dropped=%d failed=%d", calls.Load(), reporter.Dropped(), reporter.FailedBatches())
 			}
 		})
+	}
+}
+
+func TestPendingCountsQueuedAndDroppedEvents(t *testing.T) {
+	reporter := New("http://127.0.0.1:1", "secret", "dns-01", 1)
+	reporter.Enqueue(Event{EventID: "queued"})
+	if reporter.Pending() != 1 || reporter.Dropped() != 0 {
+		t.Fatalf("pending=%d dropped=%d", reporter.Pending(), reporter.Dropped())
+	}
+	reporter.Enqueue(Event{EventID: "overflow"})
+	if reporter.Pending() != 1 || reporter.Dropped() != 1 {
+		t.Fatalf("pending=%d dropped=%d", reporter.Pending(), reporter.Dropped())
 	}
 }
