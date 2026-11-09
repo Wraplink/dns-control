@@ -158,8 +158,8 @@ func TestReporterRetriesFailedBatchWithSameEventID(t *testing.T) {
 	}
 	cancel()
 	<-done
-	if calls.Load() < 2 || reporter.Dropped() != 0 {
-		t.Fatalf("calls=%d dropped=%d", calls.Load(), reporter.Dropped())
+	if calls.Load() < 2 || reporter.Dropped() != 0 || reporter.Delivered() != 1 || reporter.FailedBatches() != 1 {
+		t.Fatalf("calls=%d dropped=%d delivered=%d failed=%d", calls.Load(), reporter.Dropped(), reporter.Delivered(), reporter.FailedBatches())
 	}
 }
 
