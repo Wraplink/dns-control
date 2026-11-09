@@ -165,6 +165,13 @@ func (r *Reporter) Run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			// The in-memory reporter cannot preserve undelivered events on shutdown.
+			// Account for both the active batch and queued events explicitly.
+			remaining := r.pendingEvents.Swap(0)
+			if remaining > 0 {
+				r.dropped.Add(uint64(remaining))
+				log.Printf("dns query reporting shutdown: discarded %d undelivered events", remaining)
+			}
 			return
 		case e := <-r.queue:
 			if len(pending) >= 100 {
