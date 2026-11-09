@@ -26,13 +26,13 @@ type Event struct {
 }
 
 type Reporter struct {
-	queue   chan Event
-	url     string
-	key     string
-	id      string
-	client  *http.Client
-	dropped atomic.Uint64
-	delivered atomic.Uint64
+	queue         chan Event
+	url           string
+	key           string
+	id            string
+	client        *http.Client
+	dropped       atomic.Uint64
+	delivered     atomic.Uint64
 	failedBatches atomic.Uint64
 }
 
