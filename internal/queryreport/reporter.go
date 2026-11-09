@@ -136,7 +136,7 @@ type Handler struct {
 
 type writer struct {
 	mdns.ResponseWriter
-	rcode int
+	rcode          int
 }
 
 func (w *writer) WriteMsg(m *mdns.Msg) error {
