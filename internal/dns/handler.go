@@ -148,6 +148,7 @@ func (h *Handler) handleHijack(
 			_ = w.WriteMsg(resp)
 			return
 		}
+		setResolutionMode(w, "normal")
 		h.handleNormal(w, req)
 		return
 	}
@@ -303,6 +304,7 @@ func (h *Handler) handleSpecificIP(w mdns.ResponseWriter, req *mdns.Msg, address
 			return
 		}
 	default:
+		setResolutionMode(w, "normal")
 		h.handleNormal(w, req)
 		return
 	}
