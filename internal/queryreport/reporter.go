@@ -32,6 +32,8 @@ type Reporter struct {
 	id      string
 	client  *http.Client
 	dropped atomic.Uint64
+	delivered atomic.Uint64
+	failedBatches atomic.Uint64
 }
 
 func New(url, key, id string, capacity int) *Reporter {
@@ -57,6 +59,16 @@ func (r *Reporter) Enqueue(e Event) {
 
 func (r *Reporter) Dropped() uint64 {
 	return r.dropped.Load()
+}
+
+// Delivered returns the number of events acknowledged by Backend.
+func (r *Reporter) Delivered() uint64 {
+	return r.delivered.Load()
+}
+
+// FailedBatches returns the number of failed delivery attempts.
+func (r *Reporter) FailedBatches() uint64 {
+	return r.failedBatches.Load()
 }
 
 func (r *Reporter) send(ctx context.Context, events []Event) error {
@@ -101,11 +113,13 @@ func (r *Reporter) Run(ctx context.Context) {
 		err := r.send(reqCtx, pending)
 		cancel()
 		if err == nil {
+			r.delivered.Add(uint64(len(pending)))
 			pending = pending[:0]
 			failures = 0
 			nextRetry = time.Time{}
 			return
 		}
+		r.failedBatches.Add(1)
 		failures++
 		backoff := time.Second
 		for i := uint(1); i < failures && i < 6; i++ {
