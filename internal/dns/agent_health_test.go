@@ -10,7 +10,7 @@ import (
 
 func TestHealthyAgentRequiresRegistrationAndCapacity(t *testing.T) {
 	agents := agentregistry.NewStore()
-	h := &Handler{agents: agents}
+	h := &Handler{agents: agents, agentMaxAge: 30 * time.Second}
 	if h.healthyAgent("missing", allocation.TypeSNI) {
 		t.Fatal("unregistered agent must not serve DNS")
 	}
