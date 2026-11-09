@@ -86,3 +86,7 @@ DNS responses may be refused for clients without entitlements; verify behavior w
 - Multiple DNS nodes: use unique `NODE_ID` and advertise only IPs actually routed to each host.
 
 Production deployments should implement certificate renewal and restrictive firewall rules for any additional HTTPS API hostnames.
+
+## Backend-authoritative agent snapshots
+
+After upgrading Backend and Edge Agents, verify the Backend `network_agent_health` table contains fresh online agent heartbeats. Then add `WRAPLINK_BACKEND_AGENT_SNAPSHOT_ENABLED=true` to the DNS Control container environment (not only an unpassed host shell variable) and recreate DNS Control. Leave unset/false during initial deployment or rollback. Snapshot pages must share one revision; investigate synchronization errors before switching traffic. See [coordinated rollout](https://github.com/Wraplink/backend/blob/master/docs/agent-registry-rollout.md).
