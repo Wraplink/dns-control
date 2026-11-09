@@ -39,7 +39,7 @@ func NewHandler(
 		allocations:  allocations,
 		entitlements: entitlements,
 		ttl:          ttl,
-		agentMaxAge: 30 * time.Second,
+		agentMaxAge:  30 * time.Second,
 	}
 	if len(agents) > 0 {
 		h.agents = agents[0]
@@ -310,9 +310,9 @@ func (h *Handler) handleSpecificIP(w mdns.ResponseWriter, req *mdns.Msg, address
 // SetAgentMaxAge aligns DNS query-time health checks with the configured
 // offline timeout rather than relying on a hard-coded duration.
 func (h *Handler) SetAgentMaxAge(age time.Duration) {
- if age > 0 {
-  h.agentMaxAge = age
- }
+	if age > 0 {
+		h.agentMaxAge = age
+	}
 }
 
 func (h *Handler) healthyAgent(id string, leaseType allocation.Type) bool {

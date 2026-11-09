@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"log"
- "os"
+	"os"
 	"time"
 
 	"github.com/wraplink/dns-control/internal/agentregistry"
@@ -44,17 +44,17 @@ func main() {
 
 	allocationStore := allocation.NewStore(cfg.Agent.LeaseDuration)
 	agentStore := agentregistry.NewStore()
- // Explicit opt-in until the Backend snapshot endpoint is deployed.
- authoritativeAgents := os.Getenv("WRAPLINK_BACKEND_AGENT_SNAPSHOT_ENABLED") == "true"
- dnsAgentStore := agentStore
- if authoritativeAgents {
-  // DNS answers use an isolated Backend-owned health view; local agent
-  // polling must not refresh authoritative heartbeat timestamps.
-  dnsAgentStore = agentregistry.NewStore()
- }
- if authoritativeAgents && (!cfg.Backend.Enabled() || !cfg.Node.Enabled()) {
-  log.Fatal("backend agent snapshot synchronization requires backend and DNS node registration to be enabled")
- }
+	// Explicit opt-in until the Backend snapshot endpoint is deployed.
+	authoritativeAgents := os.Getenv("WRAPLINK_BACKEND_AGENT_SNAPSHOT_ENABLED") == "true"
+	dnsAgentStore := agentStore
+	if authoritativeAgents {
+		// DNS answers use an isolated Backend-owned health view; local agent
+		// polling must not refresh authoritative heartbeat timestamps.
+		dnsAgentStore = agentregistry.NewStore()
+	}
+	if authoritativeAgents && (!cfg.Backend.Enabled() || !cfg.Node.Enabled()) {
+		log.Fatal("backend agent snapshot synchronization requires backend and DNS node registration to be enabled")
+	}
 	syncStatus := &api.DomainSyncStatus{Enabled: cfg.Backend.Enabled() && cfg.Node.Enabled()}
 
 	var entitlementStore *entitlement.Store
@@ -82,10 +82,10 @@ func main() {
 				cfg.Backend.ControlKey,
 			)
 			if authoritativeAgents {
-    refreshAgentSnapshot(registryClient, dnsAgentStore)
-    go runAgentSnapshotSync(registryClient, dnsAgentStore, cfg.Agent.ReconcileInterval)
-   }
-   registration := backendregistry.RegisterRequest{
+				refreshAgentSnapshot(registryClient, dnsAgentStore)
+				go runAgentSnapshotSync(registryClient, dnsAgentStore, cfg.Agent.ReconcileInterval)
+			}
+			registration := backendregistry.RegisterRequest{
 				ID:        cfg.Node.ID,
 				Region:    cfg.Node.Region,
 				Addresses: append([]string(nil), cfg.Node.PublicDNS...),
@@ -283,22 +283,22 @@ func refreshDomainPolicies(client *backendregistry.Client, domains *domain.Store
 }
 
 func runAgentSnapshotSync(client *backendregistry.Client, store *agentregistry.Store, interval time.Duration) {
- ticker := time.NewTicker(interval)
- defer ticker.Stop()
- for range ticker.C {
-  refreshAgentSnapshot(client, store)
- }
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		refreshAgentSnapshot(client, store)
+	}
 }
 
 func refreshAgentSnapshot(client *backendregistry.Client, store *agentregistry.Store) {
- ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
- defer cancel()
- snapshot, err := client.FetchAgents(ctx)
- if err != nil {
-  log.Printf("backend agent snapshot refresh failed (existing health retained): %v", err)
-  return
- }
- if store.ReplaceVersionedSnapshot(snapshot.Revision, snapshot.Agents) {
-  log.Printf("backend agent snapshot synchronized revision=%d agents=%d", snapshot.Revision, len(snapshot.Agents))
- }
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	snapshot, err := client.FetchAgents(ctx)
+	if err != nil {
+		log.Printf("backend agent snapshot refresh failed (existing health retained): %v", err)
+		return
+	}
+	if store.ReplaceVersionedSnapshot(snapshot.Revision, snapshot.Agents) {
+		log.Printf("backend agent snapshot synchronized revision=%d agents=%d", snapshot.Revision, len(snapshot.Agents))
+	}
 }
