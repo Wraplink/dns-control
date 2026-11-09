@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -27,9 +27,13 @@ type Event struct {
 }
 
 // permanentDeliveryError indicates a request that cannot succeed unchanged.
-type permanentDeliveryError struct { status int }
+type permanentDeliveryError struct {
+	status int
+}
 
-func (e permanentDeliveryError) Error() string { return fmt.Sprintf("backend HTTP %d", e.status) }
+func (e permanentDeliveryError) Error() string {
+	return fmt.Sprintf("backend HTTP %d", e.status)
+}
 
 type Reporter struct {
 	queue         chan Event
