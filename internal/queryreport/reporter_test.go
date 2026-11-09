@@ -201,3 +201,109 @@ func TestHandlerCapturesSelectedResolutionMode(t *testing.T) {
 		})
 	}
 }
+
+func TestReporterPermanentRejectionDropsBatchAndContinues(t *testing.T) {
+	var calls atomic.Int32
+	var secondDelivered atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var batch struct {
+			Events []Event `json:"events"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+			t.Errorf("decode: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		calls.Add(1)
+		if len(batch.Events) != 1 {
+			t.Errorf("unexpected batch size: %d", len(batch.Events))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if batch.Events[0].EventID == "invalid" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if batch.Events[0].EventID == "valid" {
+			secondDelivered.Store(true)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		t.Errorf("unexpected event ID %q", batch.Events[0].EventID)
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+	reporter := New(server.URL, "secret", "dns-01", 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		reporter.Run(ctx)
+		close(done)
+	}()
+	reporter.Enqueue(Event{EventID: "invalid", ObservedAt: time.Now().UTC(), Domain: "example.org", QType: "A", RCode: "NOERROR", ResolutionMode: "normal"})
+	deadline := time.After(6 * time.Second)
+	for reporter.Dropped() == 0 {
+		select {
+		case <-deadline:
+			cancel()
+			<-done
+			t.Fatal("permanent rejection did not discard the batch")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	reporter.Enqueue(Event{EventID: "valid", ObservedAt: time.Now().UTC(), Domain: "example.org", QType: "A", RCode: "NOERROR", ResolutionMode: "normal"})
+	for !secondDelivered.Load() {
+		select {
+		case <-deadline:
+			cancel()
+			<-done
+			t.Fatal("subsequent batch not delivered after rejection")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	cancel()
+	<-done
+	if reporter.Dropped() != 1 || reporter.Delivered() != 1 || reporter.FailedBatches() != 1 || calls.Load() != 2 {
+		t.Fatalf("dropped=%d delivered=%d failed=%d calls=%d", reporter.Dropped(), reporter.Delivered(), reporter.FailedBatches(), calls.Load())
+	}
+}
+
+func TestReporterRetryableHTTPStatuses(t *testing.T) {
+	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			var calls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if calls.Add(1) == 1 {
+					w.WriteHeader(status)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+			reporter := New(server.URL, "secret", "dns-01", 4)
+			event := Event{EventID: "retry-id", ObservedAt: time.Now().UTC(), Domain: "example.org", QType: "A", RCode: "NOERROR", ResolutionMode: "normal"}
+			reporter.Enqueue(event)
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() {
+				reporter.Run(ctx)
+				close(done)
+			}()
+			deadline := time.After(6 * time.Second)
+			for reporter.Delivered() == 0 {
+				select {
+				case <-deadline:
+					cancel()
+					<-done
+					t.Fatalf("status %d was not retried", status)
+				case <-time.After(20 * time.Millisecond):
+				}
+			}
+			cancel()
+			<-done
+			if calls.Load() != 2 || reporter.Dropped() != 0 || reporter.FailedBatches() != 1 {
+				t.Fatalf("calls=%d dropped=%d failed=%d", calls.Load(), reporter.Dropped(), reporter.FailedBatches())
+			}
+		})
+	}
+}
