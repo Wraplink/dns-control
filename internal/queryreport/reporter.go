@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
@@ -24,6 +25,11 @@ type Event struct {
 	ResolutionMode string    `json:"resolution_mode"`
 	DurationMS     int       `json:"duration_ms"`
 }
+
+// permanentDeliveryError indicates a request that cannot succeed unchanged.
+type permanentDeliveryError struct { status int }
+
+func (e permanentDeliveryError) Error() string { return fmt.Sprintf("backend HTTP %d", e.status) }
 
 type Reporter struct {
 	queue         chan Event
@@ -91,6 +97,9 @@ func (r *Reporter) send(ctx context.Context, events []Event) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != http.StatusRequestTimeout && resp.StatusCode != http.StatusTooManyRequests {
+			return permanentDeliveryError{status: resp.StatusCode}
+		}
 		return fmt.Errorf("backend HTTP %d", resp.StatusCode)
 	}
 	return nil
@@ -120,6 +129,15 @@ func (r *Reporter) Run(ctx context.Context) {
 			return
 		}
 		r.failedBatches.Add(1)
+		var permanent permanentDeliveryError
+		if errors.As(err, &permanent) {
+			r.dropped.Add(uint64(len(pending)))
+			log.Printf("dns query reporting rejected batch permanently (HTTP %d, dropped %d); verify Backend authentication and schema", permanent.status, len(pending))
+			pending = pending[:0]
+			failures = 0
+			nextRetry = time.Time{}
+			return
+		}
 		failures++
 		backoff := time.Second
 		for i := uint(1); i < failures && i < 6; i++ {
