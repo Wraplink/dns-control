@@ -101,3 +101,64 @@ func TestHandlerCapturesRefused(t *testing.T) {
 		t.Fatal("no query event recorded")
 	}
 }
+
+func TestReporterRetriesFailedBatchWithSameEventID(t *testing.T) {
+	var calls atomic.Int32
+	var firstID string
+	var delivered atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var batch struct {
+			Events []Event `json:"events"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&batch); err != nil {
+			t.Errorf("decode: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if len(batch.Events) != 1 {
+			t.Errorf("expected one event, got %d", len(batch.Events))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		n := calls.Add(1)
+		if n == 1 {
+			firstID = batch.Events[0].EventID
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		if batch.Events[0].EventID != firstID {
+			t.Errorf("retry changed event ID: %s -> %s", firstID, batch.Events[0].EventID)
+		}
+		delivered.Store(true)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	reporter := New(server.URL, "secret", "dns-01", 4)
+	reporter.Enqueue(Event{
+		EventID: "stable-event-id", ObservedAt: time.Now().UTC(),
+		Domain: "example.org", QType: "A", RCode: "NOERROR",
+		ResolutionMode: "observed",
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		reporter.Run(ctx)
+		close(done)
+	}()
+	deadline := time.After(6 * time.Second)
+	for !delivered.Load() {
+		select {
+		case <-deadline:
+			cancel()
+			<-done
+			t.Fatal("reporter did not recover from transient backend failure")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	cancel()
+	<-done
+	if calls.Load() < 2 || reporter.Dropped() != 0 {
+		t.Fatalf("calls=%d dropped=%d", calls.Load(), reporter.Dropped())
+	}
+}
