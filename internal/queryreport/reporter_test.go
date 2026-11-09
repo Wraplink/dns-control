@@ -162,3 +162,42 @@ func TestReporterRetriesFailedBatchWithSameEventID(t *testing.T) {
 		t.Fatalf("calls=%d dropped=%d", calls.Load(), reporter.Dropped())
 	}
 }
+
+func TestHandlerCapturesSelectedResolutionMode(t *testing.T) {
+	tests := []struct {
+		name string
+		mode string
+		want string
+	}{
+		{name: "managed route", mode: "route", want: "route"},
+		{name: "managed hijack", mode: "hijack", want: "hijack"},
+		{name: "ordinary upstream", mode: "normal", want: "normal"},
+		{name: "default ordinary", mode: "", want: "normal"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reporter := New("http://127.0.0.1:1", "secret", "dns-01", 2)
+			h := Handler{Reporter: reporter, Next: mdns.HandlerFunc(func(w mdns.ResponseWriter, req *mdns.Msg) {
+				if tt.mode != "" {
+					if setter, ok := w.(interface{ SetResolutionMode(string) }); ok {
+						setter.SetResolutionMode(tt.mode)
+					}
+				}
+				msg := new(mdns.Msg)
+				msg.SetReply(req)
+				_ = w.WriteMsg(msg)
+			})}
+			req := new(mdns.Msg)
+			req.SetQuestion("example.org.", mdns.TypeA)
+			h.ServeDNS(&responseWriter{}, req)
+			select {
+			case event := <-reporter.queue:
+				if event.ResolutionMode != tt.want {
+					t.Fatalf("mode=%q, want %q", event.ResolutionMode, tt.want)
+				}
+			default:
+				t.Fatal("no event")
+			}
+		})
+	}
+}
