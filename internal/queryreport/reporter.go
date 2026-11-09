@@ -39,10 +39,10 @@ func New(url, key, id string, capacity int) *Reporter {
 		capacity = 8192
 	}
 	return &Reporter{
-		queue: make(chan Event, capacity),
-		url: strings.TrimRight(url, "/") + "/api/v1/internal/network/dns-queries/batch",
-		key: key,
-		id: id,
+		queue:  make(chan Event, capacity),
+		url:    strings.TrimRight(url, "/") + "/api/v1/internal/network/dns-queries/batch",
+		key:    key,
+		id:     id,
 		client: &http.Client{Timeout: 8 * time.Second},
 	}
 }
