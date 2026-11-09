@@ -88,37 +88,46 @@ func (r *Reporter) Run(ctx context.Context) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	pending := make([]Event, 0, 100)
+	var failures uint
+	var nextRetry time.Time
 	flush := func() {
 		if len(pending) == 0 {
 			return
 		}
-		for attempt := 0; attempt < 3; attempt++ {
-			reqCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
-			err := r.send(reqCtx, pending)
-			cancel()
-			if err == nil {
-				pending = pending[:0]
-				return
-			}
-			if attempt == 2 {
-				log.Printf("dns query reporting failed after retries: %v", err)
-				break
-			}
-			select {
-			case <-ctx.Done():
-				r.dropped.Add(uint64(len(pending)))
-				return
-			case <-time.After(time.Duration(1<<attempt) * time.Second):
-			}
+		if time.Now().Before(nextRetry) {
+			return
 		}
-		r.dropped.Add(uint64(len(pending)))
-		pending = pending[:0]
+		reqCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		err := r.send(reqCtx, pending)
+		cancel()
+		if err == nil {
+			pending = pending[:0]
+			failures = 0
+			nextRetry = time.Time{}
+			return
+		}
+		failures++
+		backoff := time.Second
+		for i := uint(1); i < failures && i < 6; i++ {
+			backoff *= 2
+		}
+		nextRetry = time.Now().Add(backoff)
+		log.Printf("dns query reporting failed (attempt %d, retry in %s, pending %d): %v", failures, backoff, len(pending), err)
+		// Keep the same event IDs for idempotent retry. The bounded queue
+		// drops new arrivals under prolonged outages rather than blocking DNS.
 	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case e := <-r.queue:
+			if len(pending) >= 100 {
+				flush()
+			}
+			if len(pending) >= 100 {
+				r.dropped.Add(1)
+				continue
+			}
 			pending = append(pending, e)
 			if len(pending) == 100 {
 				flush()
