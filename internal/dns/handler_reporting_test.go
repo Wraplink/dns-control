@@ -14,9 +14,15 @@ type modeCaptureWriter struct {
 	msg  *mdns.Msg
 }
 
-func (w *modeCaptureWriter) SetResolutionMode(mode string) { w.mode = mode }
-func (w *modeCaptureWriter) LocalAddr() net.Addr            { return &net.UDPAddr{} }
-func (w *modeCaptureWriter) RemoteAddr() net.Addr           { return &net.UDPAddr{} }
+func (w *modeCaptureWriter) SetResolutionMode(mode string) {
+	w.mode = mode
+}
+func (w *modeCaptureWriter) LocalAddr() net.Addr {
+	return &net.UDPAddr{}
+}
+func (w *modeCaptureWriter) RemoteAddr() net.Addr {
+	return &net.UDPAddr{}
+}
 func (w *modeCaptureWriter) WriteMsg(msg *mdns.Msg) error {
 	w.msg = msg
 	return nil
