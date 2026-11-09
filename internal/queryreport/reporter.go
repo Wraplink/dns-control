@@ -71,8 +71,8 @@ func (h Handler) ServeDNS(w mdns.ResponseWriter,req *mdns.Msg){
  q:=req.Question[0]
  domain:=strings.ToLower(strings.TrimSuffix(q.Name,"."))
  if domain==""||len(domain)>253{return}
- mode:="normal"
- // Resolution mode is added by the DNS policy-aware handler in a follow-up.
+ mode:="observed"
+ // Policy-aware mode attribution is not available at the response-writer boundary.
  elapsed:=time.Since(start).Milliseconds();if elapsed>600000{elapsed=600000}
  h.Reporter.Enqueue(Event{EventID:uuid.NewString(),ObservedAt:start.UTC(),Domain:domain,QType:mdns.TypeToString[q.Qtype],RCode:mdns.RcodeToString[wrapped.rcode],ResolutionMode:mode,DurationMS:int(elapsed)})
 }
