@@ -467,4 +467,19 @@ func TestDNSHandlerToBackendBatchIntegration(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("DNS query event was not ingested")
 	}
+	deadline := time.After(5 * time.Second)
+	for {
+		files, err := spool.Files()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if reporter.Delivered() == 1 && reporter.Pending() == 0 && len(files) == 0 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("ingested event was not acknowledged: delivered=%d pending=%d spool_files=%d", reporter.Delivered(), reporter.Pending(), len(files))
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
 }
