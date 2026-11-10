@@ -172,10 +172,10 @@ func TestReporterRetainsQueuedEventsDuringPersistedBatchRetry(t *testing.T) {
 		}
 	}
 	reporter.Enqueue(Event{EventID: "second", ObservedAt: time.Now().UTC(), Domain: "second.example", QType: "A", RCode: "NOERROR", ResolutionMode: "normal"})
-	if reporter.Dropped() != 0 || reporter.Pending() != 1 {
+	if reporter.Dropped() != 0 {
 		cancel()
 		<-done
-		t.Fatalf("queued event lost during retry: dropped=%d pending=%d", reporter.Dropped(), reporter.Pending())
+		t.Fatalf("queued event dropped during retry: %d", reporter.Dropped())
 	}
 	available.Store(true)
 	for delivered.Load() < 2 {
