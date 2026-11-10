@@ -88,7 +88,7 @@ func (s *Spool) Save(events []Event) (string, error) {
 	if err = temp.Close(); err != nil {
 		return "", err
 	}
-	name := filepath.Join(s.dir, fmt.Sprintf("%020d-%s.json", time.Now().UnixNano(), events[0].EventID))
+	name := filepath.Join(s.dir, fmt.Sprintf("%020d-%d.json", time.Now().UnixNano(), os.Getpid()))
 	if err = os.Rename(temp.Name(), name); err != nil {
 		return "", err
 	}
