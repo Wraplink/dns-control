@@ -67,3 +67,7 @@ docker volume ls --filter name=dnsqueryspool
 To test recovery in staging: temporarily make the Backend ingestion endpoint unavailable, issue DNS queries, confirm spool files exist, recreate DNS-Control without deleting volumes, restore Backend access, and verify the pending batches are delivered and acknowledged. Do not use `docker compose down -v` because it removes named volumes. Persisted batches may replay after an ambiguous HTTP response, so Backend event-ID deduplication is required.
 
 **Limitations:** The reporter does not fsync the in-memory DNS request queue before returning a DNS response, and its counters reset on restart. A durable spool reduces loss for persisted batches but is not an end-to-end zero-loss guarantee.
+
+### Unreadable spool batches
+
+When a persisted `.json` batch cannot be decoded, DNS-Control renames it to `.json.corrupt` and continues replaying later batches. The original bytes remain on the named volume for operator inspection; they are **not** automatically delivered or deleted. Review the log entry containing `quarantined for operator review`, inspect the quarantined file, and retain or remove it according to your audit-retention policy. Quarantined files are excluded from the replay file list and the active spool-size quota, but still consume physical disk space; monitor the volume's free space separately.
