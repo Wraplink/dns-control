@@ -230,17 +230,52 @@ func (r *Reporter) Run(ctx context.Context) {
 		}
 		select {
 		case <-ctx.Done():
+			// Persist the in-memory batch and drain the bounded queue before
+			// stopping. A process crash can still lose events not yet spooled.
+			persisted := int64(0)
+			if r.spool != nil {
+				if activeFile != "" {
+					persisted += int64(len(pending))
+				} else if len(pending) > 0 {
+					if _, err := r.spool.Save(pending); err != nil {
+						log.Printf("dns query reporting shutdown spool save failed: %v", err)
+					} else {
+						persisted += int64(len(pending))
+					}
+				}
+				batch := make([]Event, 0, 100)
+				drain := true
+				for drain {
+					select {
+					case event := <-r.queue:
+						batch = append(batch, event)
+						if len(batch) == 100 {
+							if _, err := r.spool.Save(batch); err != nil {
+								log.Printf("dns query reporting shutdown spool save failed: %v", err)
+							} else {
+								persisted += int64(len(batch))
+							}
+							batch = batch[:0]
+						}
+					default:
+						drain = false
+					}
+				}
+				if len(batch) > 0 {
+					if _, err := r.spool.Save(batch); err != nil {
+						log.Printf("dns query reporting shutdown spool save failed: %v", err)
+					} else {
+						persisted += int64(len(batch))
+					}
+				}
+			}
 			remaining := r.pendingEvents.Swap(0)
+			lost := remaining - persisted
+			if lost < 0 {
+				lost = 0
+			}
+			r.dropped.Add(uint64(lost))
 			if remaining > 0 {
-				persisted := int64(0)
-				if r.spool != nil && activeFile != "" {
-					persisted = int64(len(pending))
-				}
-				lost := remaining - persisted
-				if lost < 0 {
-					lost = 0
-				}
-				r.dropped.Add(uint64(lost))
 				log.Printf("dns query reporting shutdown: persisted_for_replay=%d discarded_unpersisted=%d", persisted, lost)
 			}
 			return
