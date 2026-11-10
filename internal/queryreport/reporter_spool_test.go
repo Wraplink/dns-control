@@ -124,3 +124,72 @@ func TestReporterKeepsSpoolOnBackendOutageThenRecovers(t *testing.T) {
 		t.Fatalf("recovery files=%v err=%v attempts=%d dropped=%d", files, err, attempts.Load(), reporter.Dropped())
 	}
 }
+
+func TestReporterRetainsQueuedEventsDuringPersistedBatchRetry(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := Event{EventID: "first", ObservedAt: time.Now().UTC(), Domain: "first.example", QType: "A", RCode: "NOERROR", ResolutionMode: "normal"}
+	if _, err := spool.Save([]Event{first}); err != nil {
+		t.Fatal(err)
+	}
+	var available atomic.Bool
+	var delivered atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !available.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		var payload struct {
+			Events []Event `json:"events"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		delivered.Add(int32(len(payload.Events)))
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	reporter := New(server.URL, "secret", "dns-01", 4)
+	reporter.SetSpool(spool)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		reporter.Run(ctx)
+		close(done)
+	}()
+	deadline := time.After(8 * time.Second)
+	for reporter.FailedBatches() == 0 {
+		select {
+		case <-deadline:
+			cancel()
+			<-done
+			t.Fatal("persisted batch was not retried")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	reporter.Enqueue(Event{EventID: "second", ObservedAt: time.Now().UTC(), Domain: "second.example", QType: "A", RCode: "NOERROR", ResolutionMode: "normal"})
+	if reporter.Dropped() != 0 || reporter.Pending() != 1 {
+		cancel()
+		<-done
+		t.Fatalf("queued event lost during retry: dropped=%d pending=%d", reporter.Dropped(), reporter.Pending())
+	}
+	available.Store(true)
+	for delivered.Load() < 2 {
+		select {
+		case <-deadline:
+			cancel()
+			<-done
+			t.Fatalf("did not deliver both events: delivered=%d", delivered.Load())
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	cancel()
+	<-done
+	if reporter.Dropped() != 0 || reporter.Pending() != 0 {
+		t.Fatalf("dropped=%d pending=%d", reporter.Dropped(), reporter.Pending())
+	}
+}
