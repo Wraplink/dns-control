@@ -101,9 +101,12 @@ func (s *Spool) Save(events []Event) (string, error) {
 	}
 	var used int64
 	for _, file := range files {
-		info, err := os.Stat(file)
+		info, err := os.Lstat(file)
 		if err != nil {
 			return "", err
+		}
+		if !info.Mode().IsRegular() {
+			continue
 		}
 		used += info.Size()
 	}
