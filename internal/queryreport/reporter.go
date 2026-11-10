@@ -218,6 +218,16 @@ func (r *Reporter) Run(ctx context.Context) {
 		log.Printf("dns query reporting failed (attempt %d, retry in %s, pending %d): %v", failures, backoff, len(pending), err)
 	}
 	for {
+		// Replay persisted batches before accepting new work. During retries,
+		// leave incoming events in the bounded channel rather than discarding
+		// them simply because the current persisted batch is immutable.
+		if len(replay) > 0 && len(pending) == 0 {
+			flush()
+		}
+		input := r.queue
+		if activeFile != "" || len(replay) > 0 {
+			input = nil
+		}
 		select {
 		case <-ctx.Done():
 			remaining := r.pendingEvents.Swap(0)
@@ -230,13 +240,7 @@ func (r *Reporter) Run(ctx context.Context) {
 				}
 			}
 			return
-		case e := <-r.queue:
-			if activeFile != "" {
-				// Never append an event to a batch already persisted on disk.
-				r.dropped.Add(1)
-				r.pendingEvents.Add(-1)
-				continue
-			}
+		case e := <-input:
 			if len(pending) >= 100 {
 				flush()
 			}
