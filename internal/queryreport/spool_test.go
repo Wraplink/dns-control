@@ -352,3 +352,27 @@ func TestSpoolAckRejectsUnrelatedFilesAndSymlinks(t *testing.T) {
 		t.Fatalf("symlink was removed: %v", err)
 	}
 }
+
+func TestSpoolQuarantineRejectsSymlink(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, []byte("external"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(spool.dir, "linked.json")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+	if err := spool.Quarantine(link); err == nil {
+		t.Fatal("expected symlink quarantine to fail")
+	}
+	if _, err := os.Lstat(link); err != nil {
+		t.Fatalf("symlink was moved: %v", err)
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("external file was changed: %v", err)
+	}
+}
