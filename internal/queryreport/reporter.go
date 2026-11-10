@@ -45,6 +45,7 @@ type Reporter struct {
 	delivered     atomic.Uint64
 	failedBatches atomic.Uint64
 	pendingEvents atomic.Int64
+	spool *Spool
 }
 
 func New(url, key, id string, capacity int) *Reporter {
@@ -59,6 +60,10 @@ func New(url, key, id string, capacity int) *Reporter {
 		client: &http.Client{Timeout: 8 * time.Second},
 	}
 }
+
+// SetSpool enables persistence for batches received by the reporting worker.
+// Configure before Run starts. Events still in the channel at a crash are not durable.
+func (r *Reporter) SetSpool(spool *Spool) { r.spool = spool }
 
 func (r *Reporter) Enqueue(e Event) {
 	r.pendingEvents.Add(1)
@@ -123,20 +128,62 @@ func (r *Reporter) Run(ctx context.Context) {
 	pending := make([]Event, 0, 100)
 	var failures uint
 	var nextRetry time.Time
+	var activeFile string
+	var replay []string
+	if r.spool != nil {
+		files, err := r.spool.Files()
+		if err != nil {
+			log.Printf("dns query spool listing failed: %v", err)
+			return
+		}
+		replay = files
+		log.Printf("dns query spool recovery: %d persisted batches", len(replay))
+	}
 	flush := func() {
+		if time.Now().Before(nextRetry) {
+			return
+		}
+		if len(pending) == 0 && len(replay) > 0 {
+			file := replay[0]
+			events, err := r.spool.Load(file)
+			if err != nil {
+				log.Printf("dns query spool unreadable file %s: %v; recovery halted", file, err)
+				nextRetry = time.Now().Add(30 * time.Second)
+				return
+			}
+			pending = events
+			activeFile = file
+			r.pendingEvents.Add(int64(len(events)))
+			replay = replay[1:]
+		}
 		if len(pending) == 0 {
 			return
 		}
-		if time.Now().Before(nextRetry) {
-			return
+		if r.spool != nil && activeFile == "" {
+			file, err := r.spool.Save(pending)
+			if err != nil {
+				r.failedBatches.Add(1)
+				log.Printf("dns query spool save failed: %v", err)
+				nextRetry = time.Now().Add(5 * time.Second)
+				return
+			}
+			activeFile = file
 		}
 		reqCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 		err := r.send(reqCtx, pending)
 		cancel()
 		if err == nil {
+			if activeFile != "" {
+				if err := r.spool.Ack(activeFile); err != nil {
+					log.Printf("dns query spool acknowledgement failed: %v; will replay idempotently", err)
+					nextRetry = time.Now().Add(5 * time.Second)
+					return
+				}
+			}
 			r.delivered.Add(uint64(len(pending)))
 			r.pendingEvents.Add(-int64(len(pending)))
 			pending = pending[:0]
+			activeFile = ""
 			failures = 0
 			nextRetry = time.Time{}
 			return
@@ -144,10 +191,18 @@ func (r *Reporter) Run(ctx context.Context) {
 		r.failedBatches.Add(1)
 		var permanent permanentDeliveryError
 		if errors.As(err, &permanent) {
+			if activeFile != "" {
+				if removeErr := r.spool.Ack(activeFile); removeErr != nil {
+					log.Printf("dns query spool rejected batch cleanup failed: %v", removeErr)
+					nextRetry = time.Now().Add(5 * time.Second)
+					return
+				}
+			}
 			r.dropped.Add(uint64(len(pending)))
 			r.pendingEvents.Add(-int64(len(pending)))
-			log.Printf("dns query reporting rejected batch permanently (HTTP %d, dropped %d); verify Backend authentication and schema", permanent.status, len(pending))
+			log.Printf("dns query reporting rejected batch permanently (HTTP %d, dropped %d)", permanent.status, len(pending))
 			pending = pending[:0]
+			activeFile = ""
 			failures = 0
 			nextRetry = time.Time{}
 			return
@@ -159,18 +214,18 @@ func (r *Reporter) Run(ctx context.Context) {
 		}
 		nextRetry = time.Now().Add(backoff)
 		log.Printf("dns query reporting failed (attempt %d, retry in %s, pending %d): %v", failures, backoff, len(pending), err)
-		// Keep the same event IDs for idempotent retry. The bounded queue
-		// drops new arrivals under prolonged outages rather than blocking DNS.
 	}
 	for {
 		select {
 		case <-ctx.Done():
-			// The in-memory reporter cannot preserve undelivered events on shutdown.
-			// Account for both the active batch and queued events explicitly.
 			remaining := r.pendingEvents.Swap(0)
 			if remaining > 0 {
-				r.dropped.Add(uint64(remaining))
-				log.Printf("dns query reporting shutdown: discarded %d undelivered events", remaining)
+				if r.spool != nil {
+					log.Printf("dns query reporting shutdown: %d pending events; persisted batches will replay", remaining)
+				} else {
+					r.dropped.Add(uint64(remaining))
+					log.Printf("dns query reporting shutdown: discarded %d undelivered events", remaining)
+				}
 			}
 			return
 		case e := <-r.queue:
