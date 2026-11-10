@@ -232,12 +232,16 @@ func (r *Reporter) Run(ctx context.Context) {
 		case <-ctx.Done():
 			remaining := r.pendingEvents.Swap(0)
 			if remaining > 0 {
-				if r.spool != nil {
-					log.Printf("dns query reporting shutdown: %d pending events; persisted batches will replay", remaining)
-				} else {
-					r.dropped.Add(uint64(remaining))
-					log.Printf("dns query reporting shutdown: discarded %d undelivered events", remaining)
+				persisted := int64(0)
+				if r.spool != nil && activeFile != "" {
+					persisted = int64(len(pending))
 				}
+				lost := remaining - persisted
+				if lost < 0 {
+					lost = 0
+				}
+				r.dropped.Add(uint64(lost))
+				log.Printf("dns query reporting shutdown: persisted_for_replay=%d discarded_unpersisted=%d", persisted, lost)
 			}
 			return
 		case e := <-input:
