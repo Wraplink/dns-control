@@ -149,8 +149,13 @@ func (r *Reporter) Run(ctx context.Context) {
 			file := replay[0]
 			events, err := r.spool.Load(file)
 			if err != nil {
-				log.Printf("dns query spool unreadable file %s: %v; recovery halted", file, err)
-				nextRetry = time.Now().Add(30 * time.Second)
+				if quarantineErr := r.spool.Quarantine(file); quarantineErr != nil {
+					log.Printf("dns query spool unreadable file %s: %v; quarantine failed: %v", file, err, quarantineErr)
+					nextRetry = time.Now().Add(30 * time.Second)
+					return
+				}
+				log.Printf("dns query spool unreadable file %s: %v; quarantined for operator review", file, err)
+				replay = replay[1:]
 				return
 			}
 			pending = events
