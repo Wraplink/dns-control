@@ -417,6 +417,23 @@ func TestDNSHandlerToBackendBatchIntegration(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+		encoded, err := json.Marshal(payload.Events[0])
+		if err != nil {
+			t.Errorf("marshal event: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		var eventFields map[string]json.RawMessage
+		if err := json.Unmarshal(encoded, &eventFields); err != nil {
+			t.Errorf("decode event fields: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		for _, forbidden := range []string{"client_ip", "source_ip", "remote_addr"} {
+			if _, exists := eventFields[forbidden]; exists {
+				t.Errorf("unexpected client address field %q", forbidden)
+			}
+		}
 		received <- payload.Events[0]
 		w.WriteHeader(http.StatusOK)
 	}))
