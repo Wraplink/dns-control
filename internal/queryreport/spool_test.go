@@ -307,3 +307,17 @@ func TestSpoolLoadRejectsSymlink(t *testing.T) {
 		t.Fatal("expected spool load to reject symlink")
 	}
 }
+
+func TestSpoolLoadRejectsNonBatchFile(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(spool.dir, "operator-notes.txt")
+	if err := os.WriteFile(path, []byte("[]"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := spool.Load(path); err == nil {
+		t.Fatal("expected non-JSON spool file to be rejected")
+	}
+}
