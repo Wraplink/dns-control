@@ -209,7 +209,11 @@ func TestReporterShutdownPersistsQueuedEvents(t *testing.T) {
 		t.Fatalf("pending=%d dropped=%d delivered=%d", reporter.Pending(), reporter.Dropped(), reporter.Delivered())
 	}
 	files, err := spool.Files()
-	if err != nil || len(files) != 0 {
-		t.Fatalf("unexpected persisted files=%v err=%v", files, err)
+	if err != nil || len(files) != 1 {
+		t.Fatalf("expected one persisted batch, files=%v err=%v", files, err)
+	}
+	events, err := spool.Load(files[0])
+	if err != nil || len(events) != 1 || events[0].EventID != "not-persisted" {
+		t.Fatalf("persisted events=%v err=%v", events, err)
 	}
 }
