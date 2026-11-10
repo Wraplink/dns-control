@@ -229,6 +229,12 @@ func (r *Reporter) Run(ctx context.Context) {
 			}
 			return
 		case e := <-r.queue:
+			if activeFile != "" {
+				// Never append an event to a batch already persisted on disk.
+				r.dropped.Add(1)
+				r.pendingEvents.Add(-1)
+				continue
+			}
 			if len(pending) >= 100 {
 				flush()
 			}
