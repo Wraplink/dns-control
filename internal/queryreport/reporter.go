@@ -133,6 +133,11 @@ func (r *Reporter) Run(ctx context.Context) {
 	var activeFile string
 	var replay []string
 	if r.spool != nil {
+		if removed, err := r.spool.CleanupStaleTemps(24 * time.Hour); err != nil {
+			log.Printf("dns query spool stale temporary cleanup failed: %v", err)
+		} else if removed > 0 {
+			log.Printf("dns query spool removed %d stale temporary files", removed)
+		}
 		files, err := r.spool.Files()
 		if err != nil {
 			log.Printf("dns query spool listing failed: %v", err)
