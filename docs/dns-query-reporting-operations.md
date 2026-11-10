@@ -21,10 +21,10 @@ dns query reporting stats delivered=... failed_batches=... dropped=... pending=.
 
 - `delivered`: events accepted by Backend.
 - `failed_batches`: failed HTTP delivery attempts, including retries.
-- `dropped`: events discarded because the queue is full, Backend permanently rejected a batch, or the process shut down with unsent events.
+- `dropped`: events discarded because the queue is full, Backend permanently rejected a batch, or the process shut down with **unpersisted** events. Persisted batches awaiting replay are not counted as dropped.
 - `pending`: events queued or waiting for HTTP delivery.
 
-These counters are process-local and reset after restart. Logs contain no DNS query names or client IP addresses.
+These counters are process-local and reset after restart. During orderly shutdown, the worker logs `persisted_for_replay` and `discarded_unpersisted` separately. Logs contain no DNS query names or client IP addresses.
 
 ## Failure handling
 
