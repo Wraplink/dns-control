@@ -210,8 +210,18 @@ func (s *Spool) Quarantine(file string) error {
 func (s *Spool) Ack(file string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if filepath.Dir(file) != s.dir {
-		return errors.New("spool path outside directory")
+	if filepath.Dir(file) != s.dir || !strings.HasSuffix(file, ".json") {
+		return errors.New("invalid spool acknowledgement path")
+	}
+	info, err := os.Lstat(file)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("spool acknowledgement target is not a regular file")
 	}
 	if err := os.Remove(file); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
