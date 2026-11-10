@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -298,5 +299,26 @@ func TestReporterPreservesPersistedBatchAcrossUnauthorizedRestart(t *testing.T) 
 				t.Fatalf("recovery files=%v err=%v dropped=%d attempts=%d", files, err, second.Dropped(), attempts.Load())
 			}
 		})
+	}
+}
+
+func TestReporterStopsAcceptingEventsWhenSpoolListingFails(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(spool.dir); err != nil {
+		t.Fatal(err)
+	}
+	reporter := New("http://127.0.0.1:1", "secret", "dns-01", 4)
+	reporter.SetSpool(spool)
+	reporter.Enqueue(Event{EventID: "queued-before-failure"})
+	reporter.Run(context.Background())
+	reporter.Enqueue(Event{EventID: "queued-after-failure"})
+	if got := reporter.Pending(); got != 0 {
+		t.Fatalf("pending after startup failure = %d, want 0", got)
+	}
+	if got := reporter.Dropped(); got != 2 {
+		t.Fatalf("dropped after startup failure = %d, want 2", got)
 	}
 }
