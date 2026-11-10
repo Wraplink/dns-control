@@ -179,6 +179,7 @@ func (r *Reporter) Run(ctx context.Context) {
 			}
 			if len(pending) >= 100 {
 				r.dropped.Add(1)
+				r.pendingEvents.Add(-1)
 				continue
 			}
 			pending = append(pending, e)
