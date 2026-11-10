@@ -272,3 +272,20 @@ func TestSpoolSaveLeavesNoTemporaryFiles(t *testing.T) {
 		t.Fatalf("expected one committed JSON batch, got %v", entries)
 	}
 }
+
+func TestSpoolCapacityIgnoresSymlinkedJSON(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	external := filepath.Join(t.TempDir(), "large.json")
+	if err := os.WriteFile(external, make([]byte, 2<<20), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(spool.dir, "external.json")); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+	if _, err := spool.Save([]Event{{EventID: "safe", Domain: "example.org"}}); err != nil {
+		t.Fatalf("external symlink must not affect capacity: %v", err)
+	}
+}
