@@ -289,3 +289,21 @@ func TestSpoolCapacityIgnoresSymlinkedJSON(t *testing.T) {
 		t.Fatalf("external symlink must not affect capacity: %v", err)
 	}
 }
+
+func TestSpoolLoadRejectsSymlink(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "external.json")
+	if err := os.WriteFile(outside, []byte("[]"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	linked := filepath.Join(spool.dir, "linked.json")
+	if err := os.Symlink(outside, linked); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+	if _, err := spool.Load(linked); err == nil {
+		t.Fatal("expected spool load to reject symlink")
+	}
+}
