@@ -173,13 +173,15 @@ func (r *Reporter) Run(ctx context.Context) {
 		}
 		if r.spool != nil && activeFile == "" {
 			file, err := r.spool.Save(pending)
+			if file != "" {
+				activeFile = file
+			}
 			if err != nil {
 				r.failedBatches.Add(1)
 				log.Printf("dns query spool save failed: %v", err)
 				nextRetry = time.Now().Add(5 * time.Second)
 				return
 			}
-			activeFile = file
 		}
 		reqCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 		err := r.send(reqCtx, pending)
