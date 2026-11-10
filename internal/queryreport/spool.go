@@ -32,6 +32,44 @@ func NewSpool(dir string, maxBytes int64) (*Spool, error) {
 	return &Spool{dir: dir, maxBytes: maxBytes}, nil
 }
 
+// CleanupStaleTemps removes only incomplete temporary writes older than maxAge.
+// It must run before the reporting worker starts writing new batches.
+func (s *Spool) CleanupStaleTemps(maxAge time.Duration) (int, error) {
+	if maxAge <= 0 {
+		return 0, errors.New("invalid temporary file maximum age")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		return 0, err
+	}
+	cutoff := time.Now().Add(-maxAge)
+	removed := 0
+	for _, entry := range entries {
+		if !entry.Type().IsRegular() || !strings.HasPrefix(entry.Name(), ".pending-") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return removed, err
+		}
+		if info.ModTime().After(cutoff) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(s.dir, entry.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return removed, err
+		}
+		removed++
+	}
+	if removed > 0 {
+		if err := syncDir(s.dir); err != nil {
+			return removed, err
+		}
+	}
+	return removed, nil
+}
+
 func (s *Spool) Files() ([]string, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
