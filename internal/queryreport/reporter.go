@@ -249,9 +249,11 @@ func (r *Reporter) Run(ctx context.Context) {
 				if activeFile != "" {
 					persisted += int64(len(pending))
 				} else if len(pending) > 0 {
-					if _, err := r.spool.Save(pending); err != nil {
+					file, err := r.spool.Save(pending)
+					if err != nil {
 						log.Printf("dns query reporting shutdown spool save failed: %v", err)
-					} else {
+					}
+					if file != "" {
 						persisted += int64(len(pending))
 					}
 				}
@@ -262,9 +264,11 @@ func (r *Reporter) Run(ctx context.Context) {
 					case event := <-r.queue:
 						batch = append(batch, event)
 						if len(batch) == 100 {
-							if _, err := r.spool.Save(batch); err != nil {
+							file, err := r.spool.Save(batch)
+							if err != nil {
 								log.Printf("dns query reporting shutdown spool save failed: %v", err)
-							} else {
+							}
+							if file != "" {
 								persisted += int64(len(batch))
 							}
 							batch = batch[:0]
@@ -274,9 +278,11 @@ func (r *Reporter) Run(ctx context.Context) {
 					}
 				}
 				if len(batch) > 0 {
-					if _, err := r.spool.Save(batch); err != nil {
+					file, err := r.spool.Save(batch)
+					if err != nil {
 						log.Printf("dns query reporting shutdown spool save failed: %v", err)
-					} else {
+					}
+					if file != "" {
 						persisted += int64(len(batch))
 					}
 				}
