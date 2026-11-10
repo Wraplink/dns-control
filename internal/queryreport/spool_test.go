@@ -145,3 +145,26 @@ func TestSpoolFilenameDoesNotContainEventID(t *testing.T) {
 		t.Fatalf("event data changed: events=%v err=%v", events, err)
 	}
 }
+
+func TestSpoolRapidWritesDoNotOverwriteBatches(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const count = 100
+	seen := make(map[string]bool, count)
+	for i := 0; i < count; i++ {
+		path, err := spool.Save([]Event{{EventID: "same-event-id", Domain: "example.org"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if seen[path] {
+			t.Fatalf("duplicate spool path: %s", path)
+		}
+		seen[path] = true
+	}
+	files, err := spool.Files()
+	if err != nil || len(files) != count {
+		t.Fatalf("files=%d err=%v", len(files), err)
+	}
+}
