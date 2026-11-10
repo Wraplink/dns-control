@@ -152,7 +152,10 @@ func (s *Spool) Save(events []Event) (string, error) {
 		return "", err
 	}
 	if err := syncDir(s.dir); err != nil {
-		return "", err
+		// The final filename is already visible, although its directory
+		// entry may not survive a crash. Retain its path for in-process
+		// retries rather than creating another copy of this batch.
+		return name, fmt.Errorf("published DNS spool batch %s, directory sync failed: %w", name, err)
 	}
 	// Remove the staging name before returning: only the committed JSON
 	// entry should remain visible after a successful write.
