@@ -224,3 +224,34 @@ func TestSpoolIgnoresSymlinkedReplayFiles(t *testing.T) {
 		t.Fatalf("symlink must not be replayed: files=%v err=%v", files, err)
 	}
 }
+
+func TestSpoolCleanupOnlyRemovesOldIncompleteWrites(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(spool.dir, ".pending-stale")
+	fresh := filepath.Join(spool.dir, ".pending-fresh")
+	unrelated := filepath.Join(spool.dir, "keep.txt")
+	for _, path := range []string{stale, fresh, unrelated} {
+		if err := os.WriteFile(path, []byte("data"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-48 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := spool.CleanupStaleTemps(24 * time.Hour)
+	if err != nil || removed != 1 {
+		t.Fatalf("removed=%d err=%v", removed, err)
+	}
+	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stale temp not removed: %v", err)
+	}
+	for _, path := range []string{fresh, unrelated} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("unexpected removal of %s: %v", path, err)
+		}
+	}
+}
