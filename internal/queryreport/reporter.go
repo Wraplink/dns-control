@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -36,6 +37,8 @@ func (e permanentDeliveryError) Error() string {
 }
 
 type Reporter struct {
+	acceptMu sync.RWMutex
+	stopping bool
 	queue         chan Event
 	url           string
 	key           string
@@ -68,6 +71,12 @@ func (r *Reporter) SetSpool(spool *Spool) {
 }
 
 func (r *Reporter) Enqueue(e Event) {
+	r.acceptMu.RLock()
+	defer r.acceptMu.RUnlock()
+	if r.stopping {
+		r.dropped.Add(1)
+		return
+	}
 	r.pendingEvents.Add(1)
 	select {
 	case r.queue <- e:
@@ -242,6 +251,9 @@ func (r *Reporter) Run(ctx context.Context) {
 		}
 		select {
 		case <-ctx.Done():
+			r.acceptMu.Lock()
+			r.stopping = true
+			r.acceptMu.Unlock()
 			// Persist the in-memory batch and drain the bounded queue before
 			// stopping. A process crash can still lose events not yet spooled.
 			persisted := int64(0)
