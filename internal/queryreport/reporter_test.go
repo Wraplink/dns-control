@@ -3,6 +3,7 @@ package queryreport
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -407,7 +408,13 @@ func TestDNSHandlerToBackendBatchIntegration(t *testing.T) {
 			ControllerID string  `json:"controller_id"`
 			Events       []Event `json:"events"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read request: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if err := json.Unmarshal(body, &payload); err != nil {
 			t.Errorf("decode: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -417,18 +424,15 @@ func TestDNSHandlerToBackendBatchIntegration(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		encoded, err := json.Marshal(payload.Events[0])
-		if err != nil {
-			t.Errorf("marshal event: %v", err)
+		var raw struct {
+			Events []map[string]json.RawMessage `json:"events"`
+		}
+		if err := json.Unmarshal(body, &raw); err != nil || len(raw.Events) != 1 {
+			t.Errorf("decode raw request fields: %v", err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		var eventFields map[string]json.RawMessage
-		if err := json.Unmarshal(encoded, &eventFields); err != nil {
-			t.Errorf("decode event fields: %v", err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
+		eventFields := raw.Events[0]
 		for _, forbidden := range []string{"client_ip", "source_ip", "remote_addr"} {
 			if _, exists := eventFields[forbidden]; exists {
 				t.Errorf("unexpected client address field %q", forbidden)
