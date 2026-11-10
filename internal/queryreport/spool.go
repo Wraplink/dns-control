@@ -168,8 +168,8 @@ func (s *Spool) Save(events []Event) (string, error) {
 }
 
 func (s *Spool) Load(file string) ([]Event, error) {
-	if filepath.Dir(file) != s.dir {
-		return nil, errors.New("spool path outside directory")
+	if filepath.Dir(file) != s.dir || !strings.HasSuffix(file, ".json") {
+		return nil, errors.New("invalid spool batch path")
 	}
 	info, err := os.Lstat(file)
 	if err != nil {
