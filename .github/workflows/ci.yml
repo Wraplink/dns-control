@@ -26,5 +26,7 @@ jobs:
           fi
       - name: Test
         run: go test ./...
+      - name: DNS query reporting race tests
+        run: go test -race -count=1 ./internal/queryreport
       - name: Vet
         run: go vet ./...
