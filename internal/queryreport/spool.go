@@ -154,10 +154,12 @@ func (s *Spool) Save(events []Event) (string, error) {
 	// Remove the staging name before returning: only the committed JSON
 	// entry should remain visible after a successful write.
 	if err := os.Remove(temp.Name()); err != nil {
-		return "", err
+		// The committed batch already exists. Return its path so the caller
+		// can retry delivery without writing a duplicate spool batch.
+		return name, fmt.Errorf("committed DNS spool batch %s, temporary cleanup failed: %w", name, err)
 	}
 	if err := syncDir(s.dir); err != nil {
-		return "", err
+		return name, fmt.Errorf("committed DNS spool batch %s, cleanup sync failed: %w", name, err)
 	}
 	return name, nil
 }
