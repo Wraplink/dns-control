@@ -171,6 +171,13 @@ func (s *Spool) Load(file string) ([]Event, error) {
 	if filepath.Dir(file) != s.dir {
 		return nil, errors.New("spool path outside directory")
 	}
+	info, err := os.Lstat(file)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, errors.New("spool batch is not a regular file")
+	}
 	payload, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
