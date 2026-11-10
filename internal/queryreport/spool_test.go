@@ -102,3 +102,26 @@ func TestSpoolQuarantinePreservesCorruptBatchAndAllowsReplay(t *testing.T) {
 		t.Fatalf("replay files=%v err=%v", files, err)
 	}
 }
+
+func TestSpoolCapacityDoesNotEvictExistingBatch(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 512)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := spool.Save([]Event{{EventID: "first", Domain: "example.org"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spool.maxBytes = info.Size()
+	if _, err := spool.Save([]Event{{EventID: "second", Domain: "example.org"}}); !errors.Is(err, ErrSpoolFull) {
+		t.Fatalf("expected spool full, got %v", err)
+	}
+	files, err := spool.Files()
+	if err != nil || len(files) != 1 || files[0] != first {
+		t.Fatalf("existing batch must survive capacity rejection: files=%v err=%v", files, err)
+	}
+}
