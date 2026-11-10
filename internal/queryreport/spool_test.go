@@ -76,3 +76,29 @@ func TestSpoolAckIsIdempotent(t *testing.T) {
 		t.Fatalf("ack after file removal: %v", err)
 	}
 }
+
+func TestSpoolQuarantinePreservesCorruptBatchAndAllowsReplay(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad := spool.dir + "/000-bad.json"
+	if err := os.WriteFile(bad, []byte("{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	good, err := spool.Save([]Event{{EventID: "good", Domain: "example.org"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := spool.Quarantine(bad); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := os.ReadFile(bad + ".corrupt")
+	if err != nil || string(payload) != "{" {
+		t.Fatalf("quarantined content=%q err=%v", payload, err)
+	}
+	files, err := spool.Files()
+	if err != nil || len(files) != 1 || files[0] != good {
+		t.Fatalf("replay files=%v err=%v", files, err)
+	}
+}
