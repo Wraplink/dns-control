@@ -206,3 +206,21 @@ func TestSpoolConcurrentSavesRespectCapacity(t *testing.T) {
 		t.Fatalf("successes=%d files=%d unexpected=%v listErr=%v", successes, len(files), unexpected, err)
 	}
 }
+
+func TestSpoolIgnoresSymlinkedReplayFiles(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(t.TempDir(), "external.json")
+	if err := os.WriteFile(outside, []byte("[]"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(spool.dir, "linked.json")); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+	files, err := spool.Files()
+	if err != nil || len(files) != 0 {
+		t.Fatalf("symlink must not be replayed: files=%v err=%v", files, err)
+	}
+}
