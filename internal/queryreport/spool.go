@@ -39,7 +39,7 @@ func (s *Spool) Files() ([]string, error) {
 	}
 	var files []string
 	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".json") {
+		if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), ".json") {
 			files = append(files, filepath.Join(s.dir, entry.Name()))
 		}
 	}
