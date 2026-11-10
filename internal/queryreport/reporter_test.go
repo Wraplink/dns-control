@@ -389,3 +389,82 @@ func TestReporterConcurrentEnqueueDuringShutdown(t *testing.T) {
 		t.Fatalf("accounted events = %d, want %d", got, producers*eventsPerProducer)
 	}
 }
+
+func TestDNSHandlerToBackendBatchIntegration(t *testing.T) {
+	received := make(chan Event, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/internal/network/dns-queries/batch" {
+			t.Errorf("unexpected ingestion request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Header.Get("X-Network-Control-Key") != "integration-secret" {
+			t.Error("missing network control key")
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		var payload struct {
+			ControllerID string  `json:"controller_id"`
+			Events       []Event `json:"events"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode: %v", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if payload.ControllerID != "dns-integration" || len(payload.Events) != 1 {
+			t.Errorf("unexpected payload: %+v", payload)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		received <- payload.Events[0]
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reporter := New(server.URL, "integration-secret", "dns-integration", 8)
+	reporter.SetSpool(spool)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		reporter.Run(ctx)
+	}()
+	defer func() {
+		cancel()
+		<-done
+	}()
+
+	handler := Handler{
+		Reporter: reporter,
+		Next: mdns.HandlerFunc(func(w mdns.ResponseWriter, req *mdns.Msg) {
+			if setter, ok := w.(interface{ SetResolutionMode(string) }); ok {
+				setter.SetResolutionMode("route")
+			}
+			reply := new(mdns.Msg)
+			reply.SetReply(req)
+			if err := w.WriteMsg(reply); err != nil {
+				t.Errorf("DNS response: %v", err)
+			}
+		}),
+	}
+	query := new(mdns.Msg)
+	query.SetQuestion("Managed.Example.", mdns.TypeA)
+	writer := &responseWriter{}
+	handler.ServeDNS(writer, query)
+	if writer.msg == nil || writer.msg.Rcode != mdns.RcodeSuccess {
+		t.Fatalf("DNS query failed: %+v", writer.msg)
+	}
+	select {
+	case event := <-received:
+		if event.EventID == "" || event.Domain != "managed.example" || event.QType != "A" || event.RCode != "NOERROR" || event.ResolutionMode != "route" || event.ObservedAt.IsZero() {
+			t.Fatalf("unexpected DNS query event: %+v", event)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("DNS query event was not ingested")
+	}
+}
