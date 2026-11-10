@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -355,5 +356,36 @@ func TestReporterRejectsEventsAfterShutdown(t *testing.T) {
 	}
 	if reporter.Dropped() != 1 {
 		t.Fatalf("dropped after shutdown = %d, want 1", reporter.Dropped())
+	}
+}
+
+func TestReporterConcurrentEnqueueDuringShutdown(t *testing.T) {
+	const producers = 8
+	const eventsPerProducer = 100
+	reporter := New("http://127.0.0.1:1", "secret", "dns-test", 64)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		reporter.Run(ctx)
+		close(done)
+	}()
+	var wg sync.WaitGroup
+	for i := 0; i < producers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < eventsPerProducer; j++ {
+				reporter.Enqueue(Event{EventID: "concurrent"})
+			}
+		}()
+	}
+	cancel()
+	wg.Wait()
+	<-done
+	if got := reporter.Pending(); got != 0 {
+		t.Fatalf("pending after concurrent shutdown = %d, want 0", got)
+	}
+	if got := reporter.Delivered() + reporter.Dropped(); got != producers*eventsPerProducer {
+		t.Fatalf("accounted events = %d, want %d", got, producers*eventsPerProducer)
 	}
 }
