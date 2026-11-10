@@ -120,7 +120,7 @@ func (s *Spool) Ack(file string) error {
 	if filepath.Dir(file) != s.dir {
 		return errors.New("spool path outside directory")
 	}
-	if err := os.Remove(file); err != nil {
+	if err := os.Remove(file); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
 	return syncDir(s.dir)
