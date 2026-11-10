@@ -48,14 +48,17 @@ services:
     env_file: .env.local
     volumes:
       - ./config.yaml:/etc/dns-control/config.yaml:ro
+      - dnsqueryspool:/var/lib/wraplink/dns-query-spool
     ports:
       - "53:53/udp"
       - "53:53/tcp"
     # API_LISTEN must bind to an address reachable within the container
     # if an authenticated internal API or reverse proxy is later required.
+volumes:
+  dnsqueryspool:
 ```
 
-Copy the example variables to `.env.local`, insert actual secrets, and run `chmod 600 .env.local`. In this Compose example the management API is **not published**. If API access is required, design a private network or authenticated HTTPS reverse proxy first; do not publish `8080:8080` directly.
+Copy the example variables to `.env.local`, insert actual secrets, and run `chmod 600 .env.local`. To enable DNS query reporting after deploying compatible Backend ingestion and DNS-Control versions, add `WRAPLINK_DNS_QUERY_REPORT_ENABLED=true`, `WRAPLINK_DNS_QUERY_SPOOL_DIR=/var/lib/wraplink/dns-query-spool`, and optionally `WRAPLINK_DNS_QUERY_SPOOL_MAX_BYTES=67108864` to `.env.local`. The named volume preserves persisted batches across container recreation; do not run `docker compose down -v`. The image provisions the spool directory for UID 10001. See [query reporting operations](dns-query-reporting-operations.md) for recovery testing and limitations. In this Compose example the management API is **not published**. If API access is required, design a private network or authenticated HTTPS reverse proxy first; do not publish `8080:8080` directly.
 
 ## 4. Deploy
 
