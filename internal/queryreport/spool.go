@@ -65,7 +65,7 @@ func (s *Spool) Save(events []Event) (string, error) {
 		}
 		used += info.Size()
 	}
-	if used+int64(len(payload)) > s.maxBytes {
+	if int64(len(payload)) > s.maxBytes-used {
 		return "", ErrSpoolFull
 	}
 	temp, err := os.CreateTemp(s.dir, ".pending-")
