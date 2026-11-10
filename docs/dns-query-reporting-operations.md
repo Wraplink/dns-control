@@ -9,7 +9,7 @@ DNS query reporting is opt-in. Enable it only after the Backend ingestion endpoi
 - The controller is registered with Backend and its credentials are valid.
 - The Backend ingestion service is reachable from DNS-Control.
 
-Set `WRAPLINK_DNS_QUERY_REPORT_ENABLED=true` for the DNS-Control process and restart it. Do not enable the reporter before Backend is upgraded.
+Set `WRAPLINK_DNS_QUERY_REPORT_ENABLED=true` for the DNS-Control process and restart it. Do not enable the reporter before Backend is upgraded. For durable persisted batches, configure `WRAPLINK_DNS_QUERY_SPOOL_DIR` to a writable directory backed by a persistent volume. Optional `WRAPLINK_DNS_QUERY_SPOOL_MAX_BYTES` defaults to `67108864` (64 MiB) and must be a positive decimal integer. If no spool directory is configured, reporting remains memory-only.
 
 ## Monitoring
 
@@ -31,7 +31,7 @@ These counters are process-local and reset after restart. Logs contain no DNS qu
 - HTTP 408, 429, 5xx and transport errors trigger bounded exponential retry with stable event IDs.
 - Other HTTP 4xx responses permanently reject the batch. Investigate the Backend key, registration, and schema immediately.
 - The in-memory queue is bounded to protect DNS latency. During an extended Backend outage, new events may be dropped.
-- The reporter is **not durable**: a crash or restart can lose queued and in-flight events. Shutdown accounting logs losses during orderly cancellation, but it cannot prevent them.
+- With a disk spool configured, **successfully persisted** batches survive restart and replay using stable event IDs; Backend deduplicates them. Events waiting in the bounded in-memory channel may still be lost on a crash. Without a spool, reporting is entirely memory-only.\n- A full or unwritable spool prevents new batches from being persisted. The queue remains bounded, so prolonged outages can still cause dropped events. Watch disk space and the `failed_batches` and `dropped` counters.\n- Corrupt spool files halt ordered recovery and require operator investigation; do not delete them without preserving a copy.\n- Backend ingestion has an event-age limit; very old persisted batches can be permanently rejected. Monitor extended outages and recovery promptly.
 
 ## Deployment checks
 
@@ -45,3 +45,25 @@ These counters are process-local and reset after restart. Logs contain no DNS qu
 ## Planned durability
 
 A future opt-in disk spool should preserve event IDs across restart, bound disk usage, recover unacknowledged batches, and only remove records after Backend acknowledgment. It must keep DNS resolution independent of disk and Backend latency. This capability is not implemented in the current reporter.
+
+## Persistent spool deployment and recovery
+
+The platform Compose configuration in [Platform PR #38](https://github.com/Wraplink/platform/pull/38) mounts the `dnsqueryspool` named volume at `/var/lib/wraplink/dns-query-spool` and sets:
+
+```dotenv
+WRAPLINK_DNS_QUERY_REPORT_ENABLED=false
+WRAPLINK_DNS_QUERY_SPOOL_DIR=/var/lib/wraplink/dns-query-spool
+WRAPLINK_DNS_QUERY_SPOOL_MAX_BYTES=67108864
+```
+
+After deploying Backend ingestion and the DNS-Control reporter, set `WRAPLINK_DNS_QUERY_REPORT_ENABLED=true`. Ensure the container UID can create files in the spool directory. The spool uses owner-restricted files and atomic renames with sync; do not share the same spool directory between independent controllers. Back up or retain the volume before destructive upgrades.
+
+```bash
+docker compose -f compose.yml -f compose.prod.yml config --quiet
+docker compose -f compose.yml -f compose.prod.yml logs --tail=100 dns-control
+docker volume ls --filter name=dnsqueryspool
+```
+
+To test recovery in staging: temporarily make the Backend ingestion endpoint unavailable, issue DNS queries, confirm spool files exist, recreate DNS-Control without deleting volumes, restore Backend access, and verify the pending batches are delivered and acknowledged. Do not use `docker compose down -v` because it removes named volumes. Persisted batches may replay after an ambiguous HTTP response, so Backend event-ID deduplication is required.
+
+**Limitations:** The reporter does not fsync the in-memory DNS request queue before returning a DNS response, and its counters reset on restart. A durable spool reduces loss for persisted batches but is not an end-to-end zero-loss guarantee.
