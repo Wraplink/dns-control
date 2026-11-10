@@ -3,6 +3,8 @@ package queryreport
 import (
 	"errors"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -123,5 +125,23 @@ func TestSpoolCapacityDoesNotEvictExistingBatch(t *testing.T) {
 	files, err := spool.Files()
 	if err != nil || len(files) != 1 || files[0] != first {
 		t.Fatalf("existing batch must survive capacity rejection: files=%v err=%v", files, err)
+	}
+}
+
+func TestSpoolFilenameDoesNotContainEventID(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err := spool.Save([]Event{{EventID: "../sensitive-event-id", Domain: "example.org"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(filepath.Base(path), "sensitive-event-id") || filepath.Dir(path) != spool.dir {
+		t.Fatalf("unsafe spool filename: %s", path)
+	}
+	events, err := spool.Load(path)
+	if err != nil || len(events) != 1 || events[0].EventID != "../sensitive-event-id" {
+		t.Fatalf("event data changed: events=%v err=%v", events, err)
 	}
 }
