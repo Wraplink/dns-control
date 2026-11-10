@@ -37,8 +37,8 @@ func (e permanentDeliveryError) Error() string {
 }
 
 type Reporter struct {
-	acceptMu sync.RWMutex
-	stopping bool
+	acceptMu      sync.RWMutex
+	stopping      bool
 	queue         chan Event
 	url           string
 	key           string
