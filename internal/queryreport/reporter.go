@@ -134,6 +134,17 @@ func (r *Reporter) send(ctx context.Context, events []Event) error {
 }
 
 func (r *Reporter) Run(ctx context.Context) {
+	// Also close admission on unexpected worker exits (for example, when
+	// the spool directory cannot be listed), not only graceful shutdown.
+	defer func() {
+		r.acceptMu.Lock()
+		r.stopping = true
+		r.acceptMu.Unlock()
+		if remaining := r.pendingEvents.Swap(0); remaining > 0 {
+			r.dropped.Add(uint64(remaining))
+			log.Printf("dns query reporter stopped with %d unpersisted events", remaining)
+		}
+	}()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	pending := make([]Event, 0, 100)
