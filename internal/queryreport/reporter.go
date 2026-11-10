@@ -225,7 +225,7 @@ func (r *Reporter) Run(ctx context.Context) {
 			flush()
 		}
 		input := r.queue
-		if activeFile != "" || len(replay) > 0 {
+		if activeFile != "" || len(replay) > 0 || len(pending) >= 100 {
 			input = nil
 		}
 		select {
