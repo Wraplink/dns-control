@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -16,6 +17,7 @@ var ErrSpoolFull = errors.New("dns query spool capacity exceeded")
 // Spool persists batches before transmission. Acknowledged batches are removed.
 // A replay can contain already accepted events; Backend deduplicates by event ID.
 type Spool struct {
+	mu       sync.Mutex
 	dir      string
 	maxBytes int64
 }
@@ -46,6 +48,8 @@ func (s *Spool) Files() ([]string, error) {
 }
 
 func (s *Spool) Save(events []Event) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if len(events) == 0 {
 		return "", errors.New("empty DNS query batch")
 	}
@@ -143,6 +147,8 @@ func (s *Spool) Quarantine(file string) error {
 }
 
 func (s *Spool) Ack(file string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if filepath.Dir(file) != s.dir {
 		return errors.New("spool path outside directory")
 	}
