@@ -31,7 +31,10 @@ These counters are process-local and reset after restart. During orderly shutdow
 - HTTP 408, 429, 5xx and transport errors trigger bounded exponential retry with stable event IDs.
 - Other HTTP 4xx responses permanently reject the batch. Investigate the Backend key, registration, and schema immediately.
 - The in-memory queue is bounded to protect DNS latency. During an extended Backend outage, new events may be dropped.
-- With a disk spool configured, **successfully persisted** batches survive restart and replay using stable event IDs; Backend deduplicates them. Events waiting in the bounded in-memory channel may still be lost on a crash. Without a spool, reporting is entirely memory-only.\n- A full or unwritable spool prevents new batches from being persisted. The queue remains bounded, so prolonged outages can still cause dropped events. Watch disk space and the `failed_batches` and `dropped` counters.\n- Corrupt spool files halt ordered recovery and require operator investigation; do not delete them without preserving a copy.\n- Backend ingestion has an event-age limit; very old persisted batches can be permanently rejected. Monitor extended outages and recovery promptly.
+- With a disk spool configured, **successfully persisted** batches survive restart and replay using stable event IDs; Backend deduplicates them. Events waiting in the bounded in-memory channel may still be lost on a crash. Without a spool, reporting is entirely memory-only.
+- A full or unwritable spool prevents new batches from being persisted. The queue remains bounded, so prolonged outages can still cause dropped events. Watch disk space and the `failed_batches` and `dropped` counters.
+- Unreadable spool batches are quarantined as `.json.corrupt` so later healthy batches can replay. Review and retain quarantined evidence according to your audit policy.
+- Backend ingestion has an event-age limit; very old persisted batches can be permanently rejected. Monitor extended outages and recovery promptly.
 
 ## Deployment checks
 
@@ -41,10 +44,6 @@ These counters are process-local and reset after restart. During orderly shutdow
 4. Confirm Backend query history shows the controller, queried domain, response code, and effective resolution mode.
 5. Confirm `delivered` increases and `pending` returns toward zero; investigate any growth in `dropped`.
 6. Roll out to remaining controllers after verifying the first controller.
-
-## Planned durability
-
-A future opt-in disk spool should preserve event IDs across restart, bound disk usage, recover unacknowledged batches, and only remove records after Backend acknowledgment. It must keep DNS resolution independent of disk and Backend latency. This capability is not implemented in the current reporter.
 
 ## Persistent spool deployment and recovery
 
@@ -56,7 +55,7 @@ WRAPLINK_DNS_QUERY_SPOOL_DIR=/var/lib/wraplink/dns-query-spool
 WRAPLINK_DNS_QUERY_SPOOL_MAX_BYTES=67108864
 ```
 
-After deploying Backend ingestion and the DNS-Control reporter, set `WRAPLINK_DNS_QUERY_REPORT_ENABLED=true`. Ensure the container UID can create files in the spool directory. The spool uses owner-restricted files and atomic renames with sync; do not share the same spool directory between independent controllers. Back up or retain the volume before destructive upgrades.
+After deploying Backend ingestion and the DNS-Control reporter, set `WRAPLINK_DNS_QUERY_REPORT_ENABLED=true`. Ensure the container UID can create files in the spool directory. The spool uses owner-restricted files and synchronized publication to disk; do not share the same spool directory between independent controllers. Back up or retain the volume before destructive upgrades.
 
 ```bash
 docker compose -f compose.yml -f compose.prod.yml config --quiet
@@ -71,3 +70,9 @@ To test recovery in staging: temporarily make the Backend ingestion endpoint una
 ### Unreadable spool batches
 
 When a persisted `.json` batch cannot be decoded, DNS-Control renames it to `.json.corrupt` and continues replaying later batches. The original bytes remain on the named volume for operator inspection; they are **not** automatically delivered or deleted. Review the log entry containing `quarantined for operator review`, inspect the quarantined file, and retain or remove it according to your audit-retention policy. Quarantined files are excluded from the replay file list and the active spool-size quota, but still consume physical disk space; monitor the volume's free space separately.
+
+### Temporary files and graceful shutdown
+
+The reporter attempts to persist its active in-memory batch and drain its bounded queue into the spool on graceful shutdown. This reduces loss during controlled restarts but cannot guarantee preservation after a crash, forced termination, or disk failure. At startup, it removes only regular `.pending-*` temporary files older than 24 hours; recent incomplete files remain untouched. Temporary and quarantined files are excluded from the logical spool quota but still consume physical disk space. Monitor free disk space and do not treat the configured spool byte limit as a filesystem capacity limit.
+
+The spool's write/ack mutex enforces the logical quota within a single controller process. It does not coordinate separate processes sharing a directory; deploy one writer per volume. Under a prolonged Backend outage or when the spool is full, events can still be dropped. The `dropped` counter is process-local and does not provide durable end-to-end loss accounting.
