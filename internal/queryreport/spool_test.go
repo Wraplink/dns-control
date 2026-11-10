@@ -321,3 +321,34 @@ func TestSpoolLoadRejectsNonBatchFile(t *testing.T) {
 		t.Fatal("expected non-JSON spool file to be rejected")
 	}
 }
+
+func TestSpoolAckRejectsUnrelatedFilesAndSymlinks(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes := filepath.Join(spool.dir, "notes.txt")
+	if err := os.WriteFile(notes, []byte("retain"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := spool.Ack(notes); err == nil {
+		t.Fatal("expected unrelated file acknowledgement to fail")
+	}
+	if _, err := os.Stat(notes); err != nil {
+		t.Fatalf("unrelated file was removed: %v", err)
+	}
+	outside := filepath.Join(t.TempDir(), "external.json")
+	if err := os.WriteFile(outside, []byte("retain"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(spool.dir, "linked.json")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+	if err := spool.Ack(link); err == nil {
+		t.Fatal("expected symlink acknowledgement to fail")
+	}
+	if _, err := os.Lstat(link); err != nil {
+		t.Fatalf("symlink was removed: %v", err)
+	}
+}
