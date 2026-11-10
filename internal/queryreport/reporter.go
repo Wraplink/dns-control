@@ -45,7 +45,7 @@ type Reporter struct {
 	delivered     atomic.Uint64
 	failedBatches atomic.Uint64
 	pendingEvents atomic.Int64
-	spool *Spool
+	spool         *Spool
 }
 
 func New(url, key, id string, capacity int) *Reporter {
@@ -63,7 +63,9 @@ func New(url, key, id string, capacity int) *Reporter {
 
 // SetSpool enables persistence for batches received by the reporting worker.
 // Configure before Run starts. Events still in the channel at a crash are not durable.
-func (r *Reporter) SetSpool(spool *Spool) { r.spool = spool }
+func (r *Reporter) SetSpool(spool *Spool) {
+	r.spool = spool
+}
 
 func (r *Reporter) Enqueue(e Event) {
 	r.pendingEvents.Add(1)
