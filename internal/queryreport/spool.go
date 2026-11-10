@@ -198,8 +198,17 @@ func (s *Spool) Load(file string) ([]Event, error) {
 // Quarantine removes an unreadable batch from the replay queue without deleting
 // its bytes. Operators can inspect the .corrupt file before removing it.
 func (s *Spool) Quarantine(file string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if filepath.Dir(file) != s.dir || !strings.HasSuffix(file, ".json") {
 		return errors.New("invalid spool quarantine path")
+	}
+	info, err := os.Lstat(file)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("spool quarantine target is not a regular file")
 	}
 	if err := os.Rename(file, file+".corrupt"); err != nil {
 		return err
