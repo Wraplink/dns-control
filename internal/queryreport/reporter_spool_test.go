@@ -194,7 +194,7 @@ func TestReporterRetainsQueuedEventsDuringPersistedBatchRetry(t *testing.T) {
 	}
 }
 
-func TestReporterShutdownCountsUnpersistedQueueAsDropped(t *testing.T) {
+func TestReporterShutdownPersistsQueuedEvents(t *testing.T) {
 	spool, err := NewSpool(t.TempDir(), 1<<20)
 	if err != nil {
 		t.Fatal(err)
@@ -205,7 +205,7 @@ func TestReporterShutdownCountsUnpersistedQueueAsDropped(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	reporter.Run(ctx)
-	if reporter.Pending() != 0 || reporter.Dropped() != 1 || reporter.Delivered() != 0 {
+	if reporter.Pending() != 0 || reporter.Dropped() != 0 || reporter.Delivered() != 0 {
 		t.Fatalf("pending=%d dropped=%d delivered=%d", reporter.Pending(), reporter.Dropped(), reporter.Delivered())
 	}
 	files, err := spool.Files()
