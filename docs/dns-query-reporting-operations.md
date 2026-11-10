@@ -28,8 +28,8 @@ These counters are process-local and reset after restart. During orderly shutdow
 
 ## Failure handling
 
-- HTTP 408, 429, 5xx and transport errors trigger bounded exponential retry with stable event IDs.
-- Other HTTP 4xx responses permanently reject the batch. Investigate the Backend key, registration, and schema immediately.
+- HTTP 401 and 403 (for example, during control-key rotation), 408, 429, 5xx and transport errors trigger bounded exponential retry with stable event IDs. Investigate sustained authorization failures immediately; retained batches still consume spool capacity.
+- Other HTTP 4xx responses permanently reject the batch. Investigate registration and schema immediately.
 - The in-memory queue is bounded to protect DNS latency. During an extended Backend outage, new events may be dropped.
 - With a disk spool configured, **successfully persisted** batches survive restart and replay using stable event IDs; Backend deduplicates them. Events waiting in the bounded in-memory channel may still be lost on a crash. Without a spool, reporting is entirely memory-only.
 - A full or unwritable spool prevents new batches from being persisted. The queue remains bounded, so prolonged outages can still cause dropped events. Watch disk space and the `failed_batches` and `dropped` counters.
