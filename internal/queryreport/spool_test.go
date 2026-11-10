@@ -255,3 +255,20 @@ func TestSpoolCleanupOnlyRemovesOldIncompleteWrites(t *testing.T) {
 		}
 	}
 }
+
+func TestSpoolSaveLeavesNoTemporaryFiles(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := spool.Save([]Event{{EventID: "clean", Domain: "example.org"}}); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(spool.dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || !strings.HasSuffix(entries[0].Name(), ".json") {
+		t.Fatalf("expected one committed JSON batch, got %v", entries)
+	}
+}
