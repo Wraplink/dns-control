@@ -3,10 +3,12 @@ package queryreport
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 var ErrSpoolFull = errors.New("dns query spool capacity exceeded")
@@ -89,7 +91,7 @@ func (s *Spool) Save(events []Event) (string, error) {
 	// Reserve a unique destination using CreateTemp, then publish the
 	// fully synced payload through a hard link. Link fails if the name
 	// exists, so a concurrent writer cannot overwrite another batch.
-	reservation, err := os.CreateTemp(s.dir, "batch-*.json")
+	reservation, err := os.CreateTemp(s.dir, fmt.Sprintf("%020d-*.json", time.Now().UnixNano()))
 	if err != nil {
 		return "", err
 	}
