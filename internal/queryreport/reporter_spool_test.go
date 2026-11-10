@@ -193,3 +193,23 @@ func TestReporterRetainsQueuedEventsDuringPersistedBatchRetry(t *testing.T) {
 		t.Fatalf("dropped=%d pending=%d", reporter.Dropped(), reporter.Pending())
 	}
 }
+
+func TestReporterShutdownCountsUnpersistedQueueAsDropped(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reporter := New("http://127.0.0.1:1", "secret", "dns-01", 4)
+	reporter.SetSpool(spool)
+	reporter.Enqueue(Event{EventID: "not-persisted"})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	reporter.Run(ctx)
+	if reporter.Pending() != 0 || reporter.Dropped() != 1 || reporter.Delivered() != 0 {
+		t.Fatalf("pending=%d dropped=%d delivered=%d", reporter.Pending(), reporter.Dropped(), reporter.Delivered())
+	}
+	files, err := spool.Files()
+	if err != nil || len(files) != 0 {
+		t.Fatalf("unexpected persisted files=%v err=%v", files, err)
+	}
+}
