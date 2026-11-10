@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	mdns "github.com/miekg/dns"
@@ -133,6 +134,22 @@ func main() {
 	var servingHandler mdns.Handler = dnsHandler
 	if cfg.Backend.Enabled() && cfg.Node.Enabled() && os.Getenv("WRAPLINK_DNS_QUERY_REPORT_ENABLED") == "true" {
 		reporter := queryreport.New(cfg.Backend.URL, cfg.Backend.ControlKey, cfg.Node.ID, 8192)
+		if dir := os.Getenv("WRAPLINK_DNS_QUERY_SPOOL_DIR"); dir != "" {
+			maxBytes := int64(64 << 20)
+			if raw := os.Getenv("WRAPLINK_DNS_QUERY_SPOOL_MAX_BYTES"); raw != "" {
+				parsed, err := strconv.ParseInt(raw, 10, 64)
+				if err != nil || parsed <= 0 {
+					log.Fatal("invalid WRAPLINK_DNS_QUERY_SPOOL_MAX_BYTES")
+				}
+				maxBytes = parsed
+			}
+			spool, err := queryreport.NewSpool(dir, maxBytes)
+			if err != nil {
+				log.Fatalf("initialize DNS query spool: %v", err)
+			}
+			reporter.SetSpool(spool)
+			log.Printf("dns query reporting disk spool enabled dir=%s max_bytes=%d", dir, maxBytes)
+		}
 		go reporter.Run(context.Background())
 		go logDNSQueryReportStats(reporter, time.Minute)
 		servingHandler = queryreport.Handler{Next: dnsHandler, Reporter: reporter}
