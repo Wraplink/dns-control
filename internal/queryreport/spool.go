@@ -151,6 +151,14 @@ func (s *Spool) Save(events []Event) (string, error) {
 	if err := syncDir(s.dir); err != nil {
 		return "", err
 	}
+	// Remove the staging name before returning: only the committed JSON
+	// entry should remain visible after a successful write.
+	if err := os.Remove(temp.Name()); err != nil {
+		return "", err
+	}
+	if err := syncDir(s.dir); err != nil {
+		return "", err
+	}
 	return name, nil
 }
 
