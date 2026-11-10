@@ -219,6 +219,8 @@ func TestReporterShutdownPersistsQueuedEvents(t *testing.T) {
 }
 
 func TestReporterPreservesPersistedBatchAcrossUnauthorizedRestart(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
 	spool, err := NewSpool(t.TempDir(), 1<<20)
 	if err != nil {
 		t.Fatal(err)
@@ -240,7 +242,7 @@ func TestReporterPreservesPersistedBatchAcrossUnauthorizedRestart(t *testing.T) 
 		}
 		attempts.Add(1)
 		if !authorized.Load() {
-			w.WriteHeader(http.StatusUnauthorized)
+			w.WriteHeader(status)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -294,5 +296,7 @@ func TestReporterPreservesPersistedBatchAcrossUnauthorizedRestart(t *testing.T) 
 	files, err = spool.Files()
 	if err != nil || len(files) != 0 || second.Dropped() != 0 || attempts.Load() < 2 {
 		t.Fatalf("recovery files=%v err=%v dropped=%d attempts=%d", files, err, second.Dropped(), attempts.Load())
+	}
+		})
 	}
 }
