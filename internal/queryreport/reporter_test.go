@@ -338,3 +338,22 @@ func TestReporterShutdownAccountsForUndeliveredEvents(t *testing.T) {
 		t.Fatalf("pending=%d dropped=%d delivered=%d", reporter.Pending(), reporter.Dropped(), reporter.Delivered())
 	}
 }
+
+func TestReporterRejectsEventsAfterShutdown(t *testing.T) {
+	reporter := New("http://127.0.0.1:1", "secret", "dns-test", 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		reporter.Run(ctx)
+		close(done)
+	}()
+	cancel()
+	<-done
+	reporter.Enqueue(Event{EventID: "after-stop"})
+	if reporter.Pending() != 0 {
+		t.Fatalf("pending after shutdown = %d, want 0", reporter.Pending())
+	}
+	if reporter.Dropped() != 1 {
+		t.Fatalf("dropped after shutdown = %d, want 1", reporter.Dropped())
+	}
+}
