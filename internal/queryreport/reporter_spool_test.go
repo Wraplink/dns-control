@@ -221,82 +221,82 @@ func TestReporterShutdownPersistsQueuedEvents(t *testing.T) {
 func TestReporterPreservesPersistedBatchAcrossUnauthorizedRestart(t *testing.T) {
 	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
-	spool, err := NewSpool(t.TempDir(), 1<<20)
-	if err != nil {
-		t.Fatal(err)
-	}
-	event := Event{EventID: "auth-recovery-id", ObservedAt: time.Now().UTC(), Domain: "example.org", QType: "A", RCode: "NOERROR", ResolutionMode: "normal"}
-	if _, err := spool.Save([]Event{event}); err != nil {
-		t.Fatal(err)
-	}
-	var authorized atomic.Bool
-	var attempts atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var batch struct {
-			Events []Event `json:"events"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&batch); err != nil || len(batch.Events) != 1 || batch.Events[0].EventID != event.EventID {
-			t.Errorf("unexpected event payload: %+v err=%v", batch, err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		attempts.Add(1)
-		if !authorized.Load() {
-			w.WriteHeader(status)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
-	first := New(server.URL, "secret", "dns-01", 4)
-	first.SetSpool(spool)
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		first.Run(ctx)
-		close(done)
-	}()
-	deadline := time.After(5 * time.Second)
-	for first.FailedBatches() == 0 {
-		select {
-		case <-deadline:
+			spool, err := NewSpool(t.TempDir(), 1<<20)
+			if err != nil {
+				t.Fatal(err)
+			}
+			event := Event{EventID: "auth-recovery-id", ObservedAt: time.Now().UTC(), Domain: "example.org", QType: "A", RCode: "NOERROR", ResolutionMode: "normal"}
+			if _, err := spool.Save([]Event{event}); err != nil {
+				t.Fatal(err)
+			}
+			var authorized atomic.Bool
+			var attempts atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var batch struct {
+					Events []Event `json:"events"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&batch); err != nil || len(batch.Events) != 1 || batch.Events[0].EventID != event.EventID {
+					t.Errorf("unexpected event payload: %+v err=%v", batch, err)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				attempts.Add(1)
+				if !authorized.Load() {
+					w.WriteHeader(status)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+			first := New(server.URL, "secret", "dns-01", 4)
+			first.SetSpool(spool)
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() {
+				first.Run(ctx)
+				close(done)
+			}()
+			deadline := time.After(5 * time.Second)
+			for first.FailedBatches() == 0 {
+				select {
+				case <-deadline:
+					cancel()
+					<-done
+					t.Fatal("initial authorization failure was not observed")
+				case <-time.After(20 * time.Millisecond):
+				}
+			}
 			cancel()
 			<-done
-			t.Fatal("initial authorization failure was not observed")
-		case <-time.After(20 * time.Millisecond):
-		}
-	}
-	cancel()
-	<-done
-	files, err := spool.Files()
-	if err != nil || len(files) != 1 || first.Dropped() != 0 {
-		t.Fatalf("authorization failure must retain batch: files=%v err=%v dropped=%d", files, err, first.Dropped())
-	}
-	authorized.Store(true)
-	second := New(server.URL, "secret", "dns-01", 4)
-	second.SetSpool(spool)
-	ctx2, cancel2 := context.WithCancel(context.Background())
-	done2 := make(chan struct{})
-	go func() {
-		second.Run(ctx2)
-		close(done2)
-	}()
-	deadline = time.After(5 * time.Second)
-	for second.Delivered() == 0 {
-		select {
-		case <-deadline:
+			files, err := spool.Files()
+			if err != nil || len(files) != 1 || first.Dropped() != 0 {
+				t.Fatalf("authorization failure must retain batch: files=%v err=%v dropped=%d", files, err, first.Dropped())
+			}
+			authorized.Store(true)
+			second := New(server.URL, "secret", "dns-01", 4)
+			second.SetSpool(spool)
+			ctx2, cancel2 := context.WithCancel(context.Background())
+			done2 := make(chan struct{})
+			go func() {
+				second.Run(ctx2)
+				close(done2)
+			}()
+			deadline = time.After(5 * time.Second)
+			for second.Delivered() == 0 {
+				select {
+				case <-deadline:
+					cancel2()
+					<-done2
+					t.Fatal("batch not replayed after authorization recovery")
+				case <-time.After(20 * time.Millisecond):
+				}
+			}
 			cancel2()
 			<-done2
-			t.Fatal("batch not replayed after authorization recovery")
-		case <-time.After(20 * time.Millisecond):
-		}
-	}
-	cancel2()
-	<-done2
-	files, err = spool.Files()
-	if err != nil || len(files) != 0 || second.Dropped() != 0 || attempts.Load() < 2 {
-		t.Fatalf("recovery files=%v err=%v dropped=%d attempts=%d", files, err, second.Dropped(), attempts.Load())
-	}
+			files, err = spool.Files()
+			if err != nil || len(files) != 0 || second.Dropped() != 0 || attempts.Load() < 2 {
+				t.Fatalf("recovery files=%v err=%v dropped=%d attempts=%d", files, err, second.Dropped(), attempts.Load())
+			}
 		})
 	}
 }
