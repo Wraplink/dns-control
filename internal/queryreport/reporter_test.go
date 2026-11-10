@@ -269,7 +269,7 @@ func TestReporterPermanentRejectionDropsBatchAndContinues(t *testing.T) {
 }
 
 func TestReporterRetryableHTTPStatuses(t *testing.T) {
-	for _, status := range []int{http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusRequestTimeout, http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
 			var calls atomic.Int32
 			var wrongID atomic.Bool
