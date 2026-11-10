@@ -59,3 +59,20 @@ func TestSpoolCapacityAndCorruption(t *testing.T) {
 		t.Fatal("corrupt spool file accepted")
 	}
 }
+
+func TestSpoolAckIsIdempotent(t *testing.T) {
+	spool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path, err := spool.Save([]Event{{EventID: "ack-twice", Domain: "example.org"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := spool.Ack(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := spool.Ack(path); err != nil {
+		t.Fatalf("ack after file removal: %v", err)
+	}
+}
