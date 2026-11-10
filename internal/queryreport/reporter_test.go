@@ -148,7 +148,7 @@ func TestReporterRetriesFailedBatchWithSameEventID(t *testing.T) {
 		close(done)
 	}()
 	deadline := time.After(6 * time.Second)
-	for !delivered.Load() {
+	for !delivered.Load() || reporter.Delivered() != 1 {
 		select {
 		case <-deadline:
 			cancel()
