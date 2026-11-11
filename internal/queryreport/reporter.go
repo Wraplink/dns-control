@@ -370,6 +370,9 @@ func (h Handler) ServeDNS(w mdns.ResponseWriter, req *mdns.Msg) {
 	}
 	q := req.Question[0]
 	domain := strings.ToLower(strings.TrimSuffix(q.Name, "."))
+	if q.Name == "." {
+		domain = "."
+	}
 	if domain == "" || len(domain) > 253 {
 		return
 	}
