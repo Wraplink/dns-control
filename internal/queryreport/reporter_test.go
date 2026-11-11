@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"sync/atomic"
+	"strings"
 	"testing"
 	"time"
 
@@ -187,6 +188,35 @@ func TestHandlerReportsRootZoneQuery(t *testing.T) {
 		}
 	default:
 		t.Fatal("root-zone DNS query was not reported")
+	}
+}
+
+func TestHandlerReportsDNSServiceLabels(t *testing.T) {
+	for _, name := range []string{"_sip._tcp.example.org.", "_dmarc.example.org.", "_acme-challenge.example.org."} {
+		t.Run(name, func(t *testing.T) {
+			reporter := New("http://127.0.0.1:1", "secret", "dns-01", 2)
+			handler := Handler{
+				Reporter: reporter,
+				Next: mdns.HandlerFunc(func(w mdns.ResponseWriter, req *mdns.Msg) {
+					reply := new(mdns.Msg)
+					reply.SetReply(req)
+					if err := w.WriteMsg(reply); err != nil {
+						t.Errorf("write DNS response: %v", err)
+					}
+				}),
+			}
+			request := new(mdns.Msg)
+			request.SetQuestion(name, mdns.TypeTXT)
+			handler.ServeDNS(&responseWriter{}, request)
+			select {
+			case event := <-reporter.queue:
+				if event.Domain != strings.TrimSuffix(name, ".") || event.QType != "TXT" {
+					t.Fatalf("unexpected DNS service audit event: %+v", event)
+				}
+			default:
+				t.Fatal("DNS service-label query was not reported")
+			}
+		})
 	}
 }
 
