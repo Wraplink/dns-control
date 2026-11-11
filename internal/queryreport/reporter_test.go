@@ -165,6 +165,31 @@ func TestReporterRetriesFailedBatchWithSameEventID(t *testing.T) {
 	}
 }
 
+func TestHandlerReportsRootZoneQuery(t *testing.T) {
+	reporter := New("http://127.0.0.1:1", "secret", "dns-01", 2)
+	handler := Handler{
+		Reporter: reporter,
+		Next: mdns.HandlerFunc(func(w mdns.ResponseWriter, req *mdns.Msg) {
+			reply := new(mdns.Msg)
+			reply.SetReply(req)
+			if err := w.WriteMsg(reply); err != nil {
+				t.Errorf("write root-zone DNS response: %v", err)
+			}
+		}),
+	}
+	request := new(mdns.Msg)
+	request.SetQuestion(".", mdns.TypeNS)
+	handler.ServeDNS(&responseWriter{}, request)
+	select {
+	case event := <-reporter.queue:
+		if event.Domain != "." || event.QType != "NS" || event.RCode != "NOERROR" {
+			t.Fatalf("unexpected root-zone DNS audit event: %+v", event)
+		}
+	default:
+		t.Fatal("root-zone DNS query was not reported")
+	}
+}
+
 func TestHandlerCapturesSelectedResolutionMode(t *testing.T) {
 	tests := []struct {
 		name string
