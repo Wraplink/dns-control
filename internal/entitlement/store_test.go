@@ -32,8 +32,8 @@ func TestReplaceDropsExpiredOrExhaustedItems(t *testing.T) {
 		Entitlements: []Item{
 			{
 				ClientIP:       "203.0.113.10",
-				DataLimitBytes: 1024,
-				RemainingBytes: 0,
+				DataLimitBytes:  1024,
+				RemainingBytes:  0,
 				ExpiresAt:      time.Now().UTC().Add(time.Hour),
 			},
 			{
@@ -189,13 +189,13 @@ func TestUnlimitedEntitlementRemainsAuthorized(t *testing.T) {
 	store := NewStore(time.Minute)
 	ip := net.ParseIP("203.0.113.66")
 	store.Replace(Snapshot{Entitlements: []Item{{
-		EntitlementID: "unlimited-ent",
+		EntitlementID:  "unlimited-ent",
 		SubscriptionID: "unlimited-sub",
-		ClientIP: "203.0.113.66",
+		ClientIP:       "203.0.113.66",
 		ConnectionMode: "smart",
-		DataLimitBytes: 0,
+		DataLimitBytes:  0,
 		RemainingBytes: 0,
-		ExpiresAt: time.Now().UTC().Add(time.Hour),
+		ExpiresAt:      time.Now().UTC().Add(time.Hour),
 	}}})
 	if store.Count() != 1 || !store.Allowed(ip) {
 		t.Fatalf("unlimited entitlement should be authorized: count=%d allowed=%t", store.Count(), store.Allowed(ip))
@@ -210,7 +210,7 @@ func TestLimitedEntitlementWithZeroRemainingIsRejected(t *testing.T) {
 	store := NewStore(time.Minute)
 	ip := net.ParseIP("203.0.113.67")
 	store.Replace(Snapshot{Entitlements: []Item{{
-		ClientIP: "203.0.113.67",
+		ClientIP:       "203.0.113.67",
 		DataLimitBytes: 1024,
 		RemainingBytes: 0,
 		ExpiresAt: time.Now().UTC().Add(time.Hour),
