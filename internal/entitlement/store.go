@@ -55,7 +55,7 @@ func (s *Store) Replace(snapshot Snapshot) {
 
 	for _, item := range snapshot.Entitlements {
 		ip := canonicalIPv4(item.ClientIP)
-		if ip == "" || !item.ExpiresAt.After(now) || item.RemainingBytes <= 0 {
+		if ip == "" || !item.ExpiresAt.After(now) || (item.DataLimitBytes > 0 && item.RemainingBytes <= 0) {
 			continue
 		}
 		item.ClientIP = ip
@@ -102,7 +102,7 @@ func (s *Store) Allowed(ip net.IP) bool {
 		return false
 	}
 
-	return item.ExpiresAt.After(now) && item.RemainingBytes > 0
+	return item.ExpiresAt.After(now) && (item.DataLimitBytes == 0 || item.RemainingBytes > 0)
 }
 
 func (s *Store) Get(ip net.IP) (Item, bool) {
@@ -133,7 +133,7 @@ func (s *Store) AccessSnapshot() (uint64, []Grant) {
 
 	result := make([]Grant, 0, len(s.byIP))
 	for _, item := range s.byIP {
-		if !item.ExpiresAt.After(now) || item.RemainingBytes <= 0 {
+		if !item.ExpiresAt.After(now) || (item.DataLimitBytes > 0 && item.RemainingBytes <= 0) {
 			continue
 		}
 		result = append(result, Grant{
