@@ -32,8 +32,8 @@ func TestReplaceDropsExpiredOrExhaustedItems(t *testing.T) {
 		Entitlements: []Item{
 			{
 				ClientIP:       "203.0.113.10",
-				DataLimitBytes:  1024,
-				RemainingBytes:  0,
+				DataLimitBytes: 1024,
+				RemainingBytes: 0,
 				ExpiresAt:      time.Now().UTC().Add(time.Hour),
 			},
 			{
@@ -213,7 +213,7 @@ func TestLimitedEntitlementWithZeroRemainingIsRejected(t *testing.T) {
 		ClientIP:       "203.0.113.67",
 		DataLimitBytes: 1024,
 		RemainingBytes: 0,
-		ExpiresAt: time.Now().UTC().Add(time.Hour),
+		ExpiresAt:      time.Now().UTC().Add(time.Hour),
 	}}})
 	if store.Count() != 0 || store.Allowed(ip) {
 		t.Fatal("exhausted limited entitlement must not be authorized")
