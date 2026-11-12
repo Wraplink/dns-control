@@ -193,7 +193,7 @@ func TestUnlimitedEntitlementRemainsAuthorized(t *testing.T) {
 		SubscriptionID: "unlimited-sub",
 		ClientIP:       "203.0.113.66",
 		ConnectionMode: "smart",
-		DataLimitBytes:  0,
+		DataLimitBytes: 0,
 		RemainingBytes: 0,
 		ExpiresAt:      time.Now().UTC().Add(time.Hour),
 	}}})
