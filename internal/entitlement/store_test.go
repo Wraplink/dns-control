@@ -32,6 +32,7 @@ func TestReplaceDropsExpiredOrExhaustedItems(t *testing.T) {
 		Entitlements: []Item{
 			{
 				ClientIP:       "203.0.113.10",
+				DataLimitBytes: 1024,
 				RemainingBytes: 0,
 				ExpiresAt:      time.Now().UTC().Add(time.Hour),
 			},
