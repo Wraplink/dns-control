@@ -210,10 +210,10 @@ func TestAccessSnapshotTracksIPOwnershipHandover(t *testing.T) {
 	ip := "203.0.113.60"
 
 	store.Replace(Snapshot{Entitlements: []Item{{
-		EntitlementID: "old-entitlement",
+		EntitlementID:  "old-entitlement",
 		SubscriptionID: "old-subscription",
-		ClientIP: ip,
-		ExpiresAt: expiresAt,
+		ClientIP:       ip,
+		ExpiresAt:      expiresAt,
 	}}})
 	firstRevision, firstGrants := store.AccessSnapshot()
 	if len(firstGrants) != 1 || firstGrants[0].EntitlementID != "old-entitlement" {
@@ -227,10 +227,10 @@ func TestAccessSnapshotTracksIPOwnershipHandover(t *testing.T) {
 	}
 
 	store.Replace(Snapshot{Entitlements: []Item{{
-		EntitlementID: "new-entitlement",
+		EntitlementID:  "new-entitlement",
 		SubscriptionID: "new-subscription",
-		ClientIP: ip,
-		ExpiresAt: expiresAt,
+		ClientIP:       ip,
+		ExpiresAt:      expiresAt,
 	}}})
 	newRevision, newGrants := store.AccessSnapshot()
 	if newRevision != revokedRevision+1 || len(newGrants) != 1 || newGrants[0].EntitlementID != "new-entitlement" {
