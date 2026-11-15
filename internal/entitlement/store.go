@@ -102,7 +102,7 @@ func (s *Store) Allowed(ip net.IP) bool {
 		return false
 	}
 
-	return item.ExpiresAt.After(now) && item.RemainingBytes > 0
+	return item.ExpiresAt.After(now) && (item.DataLimitBytes == 0 || item.RemainingBytes > 0)
 }
 
 func (s *Store) Get(ip net.IP) (Item, bool) {
