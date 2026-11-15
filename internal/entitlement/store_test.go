@@ -13,7 +13,7 @@ func TestAllowedUsesFreshUsableSnapshot(t *testing.T) {
 			{
 				ClientIP:  "203.0.113.10",
 				RemainingBytes: 1024,
-				ExpiresAt:  time.Now().UTC().Add(time.Hour),
+				ExpiresAt:      time.Now().UTC().Add(time.Hour),
 			},
 		},
 	})
@@ -190,7 +190,7 @@ func TestUnlimitedEntitlementRemainsAuthorized(t *testing.T) {
 	store.Replace(Snapshot{Entitlements: []Item{{
 		EntitlementID:  "unlimited-1",
 		SubscriptionID: "subscription-1",
-		ClientIP:  "203.0.113.50",
+		ClientIP:       "203.0.113.50",
 		DataLimitBytes: 0,
 		RemainingBytes: 0,
 		ExpiresAt:  time.Now().UTC().Add(time.Hour),
