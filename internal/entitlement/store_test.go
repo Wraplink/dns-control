@@ -32,6 +32,7 @@ func TestReplaceDropsExpiredOrExhaustedItems(t *testing.T) {
 		Entitlements: []Item{
 			{
 				ClientIP:       "203.0.113.10",
+				DataLimitBytes: 1024,
 				RemainingBytes: 0,
 				ExpiresAt:      time.Now().UTC().Add(time.Hour),
 			},
@@ -181,5 +182,90 @@ func TestConnectionModesStoredBySourceIP(t *testing.T) {
 	}
 	if store.Allowed(net.ParseIP("203.0.113.13")) {
 		t.Fatal("unknown mode must not silently enable managed DNS policy")
+	}
+}
+
+func TestUnlimitedEntitlementRemainsAuthorized(t *testing.T) {
+	store := NewStore(time.Minute)
+	store.Replace(Snapshot{Entitlements: []Item{{
+		EntitlementID:  "unlimited-1",
+		SubscriptionID: "subscription-1",
+		ClientIP:       "203.0.113.50",
+		DataLimitBytes: 0,
+		RemainingBytes: 0,
+		ExpiresAt:      time.Now().UTC().Add(time.Hour),
+	}}})
+	if !store.Allowed(net.ParseIP("203.0.113.50")) {
+		t.Fatal("unlimited entitlement should be authorized")
+	}
+	_, grants := store.AccessSnapshot()
+	if len(grants) != 1 || grants[0].ClientIP != "203.0.113.50" {
+		t.Fatalf("unlimited entitlement missing from access grants: %+v", grants)
+	}
+}
+
+func TestAccessSnapshotTracksIPOwnershipHandover(t *testing.T) {
+	store := NewStore(time.Minute)
+	expiresAt := time.Now().UTC().Add(time.Hour)
+	ip := "203.0.113.60"
+
+	store.Replace(Snapshot{Entitlements: []Item{{
+		EntitlementID:  "old-entitlement",
+		SubscriptionID: "old-subscription",
+		ClientIP:       ip,
+		ExpiresAt:      expiresAt,
+	}}})
+	firstRevision, firstGrants := store.AccessSnapshot()
+	if len(firstGrants) != 1 || firstGrants[0].EntitlementID != "old-entitlement" {
+		t.Fatalf("expected old owner's grant, got %+v", firstGrants)
+	}
+
+	store.Replace(Snapshot{Entitlements: []Item{}})
+	revokedRevision, revokedGrants := store.AccessSnapshot()
+	if revokedRevision != firstRevision+1 || len(revokedGrants) != 0 {
+		t.Fatalf("expected immediate empty grant set after revocation, revision=%d grants=%+v", revokedRevision, revokedGrants)
+	}
+
+	store.Replace(Snapshot{Entitlements: []Item{{
+		EntitlementID:  "new-entitlement",
+		SubscriptionID: "new-subscription",
+		ClientIP:       ip,
+		ExpiresAt:      expiresAt,
+	}}})
+	newRevision, newGrants := store.AccessSnapshot()
+	if newRevision != revokedRevision+1 || len(newGrants) != 1 || newGrants[0].EntitlementID != "new-entitlement" {
+		t.Fatalf("expected new owner only, revision=%d grants=%+v", newRevision, newGrants)
+	}
+}
+
+func TestConflictingIPOwnersFailClosed(t *testing.T) {
+	store := NewStore(time.Minute)
+	expiresAt := time.Now().UTC().Add(time.Hour)
+	store.Replace(Snapshot{Entitlements: []Item{
+		{EntitlementID: "old", UserID: "user-1", SubscriptionID: "sub-1", ClientIP: "203.0.113.90", ExpiresAt: expiresAt},
+		{EntitlementID: "new", UserID: "user-2", SubscriptionID: "sub-2", ClientIP: "203.0.113.90", ExpiresAt: expiresAt},
+	}})
+	if store.Allowed(net.ParseIP("203.0.113.90")) {
+		t.Fatal("conflicting IP owners must never be authorized")
+	}
+	_, grants := store.AccessSnapshot()
+	if len(grants) != 0 {
+		t.Fatalf("conflicting IP owners must not reach edge agents: %+v", grants)
+	}
+}
+
+func TestInvalidNegativeBandwidthLimitFailsClosed(t *testing.T) {
+	store := NewStore(time.Minute)
+	store.Replace(Snapshot{Entitlements: []Item{{
+		EntitlementID: "invalid", ClientIP: "203.0.113.91",
+		DataLimitBytes: -1, RemainingBytes: 100,
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	}}})
+	if store.Allowed(net.ParseIP("203.0.113.91")) {
+		t.Fatal("negative data limit must not authorize a client")
+	}
+	_, grants := store.AccessSnapshot()
+	if len(grants) != 0 {
+		t.Fatalf("invalid bandwidth limit leaked into access grants: %+v", grants)
 	}
 }
