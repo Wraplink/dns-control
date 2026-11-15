@@ -52,10 +52,11 @@ func NewStore(maxStale time.Duration) *Store {
 func (s *Store) Replace(snapshot Snapshot) {
 	now := time.Now().UTC()
 	items := make(map[string]Item, len(snapshot.Entitlements))
+	conflicted := make(map[string]bool)
 
 	for _, item := range snapshot.Entitlements {
 		ip := canonicalIPv4(item.ClientIP)
-		if ip == "" || !item.ExpiresAt.After(now) || (item.DataLimitBytes > 0 && item.RemainingBytes <= 0) {
+		if ip == "" || !item.ExpiresAt.After(now) || !usableBandwidth(item) {
 			continue
 		}
 		item.ClientIP = ip
@@ -64,6 +65,14 @@ func (s *Store) Replace(snapshot Snapshot) {
 		}
 		if item.ConnectionMode != "smart" && item.ConnectionMode != "gaming" && item.ConnectionMode != "streaming" {
 			continue // reject invalid policy modes rather than apply the wrong rule
+		}
+		if conflicted[ip] {
+			continue
+		}
+		if previous, exists := items[ip]; exists && (previous.EntitlementID != item.EntitlementID || previous.UserID != item.UserID || previous.SubscriptionID != item.SubscriptionID) {
+			delete(items, ip)
+			conflicted[ip] = true
+			continue
 		}
 		items[ip] = item
 	}
@@ -102,7 +111,7 @@ func (s *Store) Allowed(ip net.IP) bool {
 		return false
 	}
 
-	return item.ExpiresAt.After(now) && (item.DataLimitBytes == 0 || item.RemainingBytes > 0)
+	return item.ExpiresAt.After(now) && usableBandwidth(item)
 }
 
 func (s *Store) Get(ip net.IP) (Item, bool) {
@@ -133,7 +142,7 @@ func (s *Store) AccessSnapshot() (uint64, []Grant) {
 
 	result := make([]Grant, 0, len(s.byIP))
 	for _, item := range s.byIP {
-		if !item.ExpiresAt.After(now) || (item.DataLimitBytes > 0 && item.RemainingBytes <= 0) {
+		if !item.ExpiresAt.After(now) || !usableBandwidth(item) {
 			continue
 		}
 		result = append(result, Grant{
@@ -149,6 +158,11 @@ func (s *Store) AccessSnapshot() (uint64, []Grant) {
 	})
 
 	return s.accessRevision, result
+}
+
+// Only zero represents unlimited bandwidth. Negative limits fail closed.
+func usableBandwidth(item Item) bool {
+	return item.DataLimitBytes == 0 || (item.DataLimitBytes > 0 && item.RemainingBytes > 0)
 }
 
 func (s *Store) Count() int {
