@@ -32,6 +32,7 @@ func TestReplaceDropsExpiredOrExhaustedItems(t *testing.T) {
 		Entitlements: []Item{
 			{
 				ClientIP:       "203.0.113.10",
+				DataLimitBytes: 1024,
 				RemainingBytes: 0,
 				ExpiresAt:      time.Now().UTC().Add(time.Hour),
 			},
@@ -181,5 +182,24 @@ func TestConnectionModesStoredBySourceIP(t *testing.T) {
 	}
 	if store.Allowed(net.ParseIP("203.0.113.13")) {
 		t.Fatal("unknown mode must not silently enable managed DNS policy")
+	}
+}
+
+func TestUnlimitedEntitlementRemainsAuthorized(t *testing.T) {
+	store := NewStore(time.Minute)
+	store.Replace(Snapshot{Entitlements: []Item{{
+		EntitlementID: "unlimited-1",
+		SubscriptionID: "subscription-1",
+		ClientIP: "203.0.113.50",
+		DataLimitBytes: 0,
+		RemainingBytes: 0,
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	}}})
+	if !store.Allowed(net.ParseIP("203.0.113.50")) {
+		t.Fatal("unlimited entitlement should be authorized")
+	}
+	_, grants := store.AccessSnapshot()
+	if len(grants) != 1 || grants[0].ClientIP != "203.0.113.50" {
+		t.Fatalf("unlimited entitlement missing from access grants: %+v", grants)
 	}
 }
