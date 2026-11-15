@@ -203,3 +203,37 @@ func TestUnlimitedEntitlementRemainsAuthorized(t *testing.T) {
 		t.Fatalf("unlimited entitlement missing from access grants: %+v", grants)
 	}
 }
+
+func TestAccessSnapshotTracksIPOwnershipHandover(t *testing.T) {
+	store := NewStore(time.Minute)
+	expiresAt := time.Now().UTC().Add(time.Hour)
+	ip := "203.0.113.60"
+
+	store.Replace(Snapshot{Entitlements: []Item{{
+		EntitlementID: "old-entitlement",
+		SubscriptionID: "old-subscription",
+		ClientIP: ip,
+		ExpiresAt: expiresAt,
+	}}})
+	firstRevision, firstGrants := store.AccessSnapshot()
+	if len(firstGrants) != 1 || firstGrants[0].EntitlementID != "old-entitlement" {
+		t.Fatalf("expected old owner's grant, got %+v", firstGrants)
+	}
+
+	store.Replace(Snapshot{Entitlements: []Item{}})
+	revokedRevision, revokedGrants := store.AccessSnapshot()
+	if revokedRevision != firstRevision+1 || len(revokedGrants) != 0 {
+		t.Fatalf("expected immediate empty grant set after revocation, revision=%d grants=%+v", revokedRevision, revokedGrants)
+	}
+
+	store.Replace(Snapshot{Entitlements: []Item{{
+		EntitlementID: "new-entitlement",
+		SubscriptionID: "new-subscription",
+		ClientIP: ip,
+		ExpiresAt: expiresAt,
+	}}})
+	newRevision, newGrants := store.AccessSnapshot()
+	if newRevision != revokedRevision+1 || len(newGrants) != 1 || newGrants[0].EntitlementID != "new-entitlement" {
+		t.Fatalf("expected new owner only, revision=%d grants=%+v", newRevision, newGrants)
+	}
+}
