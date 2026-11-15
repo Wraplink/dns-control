@@ -237,3 +237,35 @@ func TestAccessSnapshotTracksIPOwnershipHandover(t *testing.T) {
 		t.Fatalf("expected new owner only, revision=%d grants=%+v", newRevision, newGrants)
 	}
 }
+
+func TestConflictingIPOwnersFailClosed(t *testing.T) {
+	store := NewStore(time.Minute)
+	expiresAt := time.Now().UTC().Add(time.Hour)
+	store.Replace(Snapshot{Entitlements: []Item{
+		{EntitlementID: "old", UserID: "user-1", SubscriptionID: "sub-1", ClientIP: "203.0.113.90", ExpiresAt: expiresAt},
+		{EntitlementID: "new", UserID: "user-2", SubscriptionID: "sub-2", ClientIP: "203.0.113.90", ExpiresAt: expiresAt},
+	}})
+	if store.Allowed(net.ParseIP("203.0.113.90")) {
+		t.Fatal("conflicting IP owners must never be authorized")
+	}
+	_, grants := store.AccessSnapshot()
+	if len(grants) != 0 {
+		t.Fatalf("conflicting IP owners must not reach edge agents: %+v", grants)
+	}
+}
+
+func TestInvalidNegativeBandwidthLimitFailsClosed(t *testing.T) {
+	store := NewStore(time.Minute)
+	store.Replace(Snapshot{Entitlements: []Item{{
+		EntitlementID: "invalid", ClientIP: "203.0.113.91",
+		DataLimitBytes: -1, RemainingBytes: 100,
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	}}})
+	if store.Allowed(net.ParseIP("203.0.113.91")) {
+		t.Fatal("negative data limit must not authorize a client")
+	}
+	_, grants := store.AccessSnapshot()
+	if len(grants) != 0 {
+		t.Fatalf("invalid bandwidth limit leaked into access grants: %+v", grants)
+	}
+}
