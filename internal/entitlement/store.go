@@ -8,17 +8,17 @@ import (
 )
 
 type Item struct {
-	EntitlementID  string    `json:"entitlementId"`
-	UserID         string    `json:"userId"`
-	SubscriptionID string    `json:"subscriptionId"`
-	ClientIP       string    `json:"clientIp"`
-	PlanCode       string    `json:"planCode"`
-	ConnectionMode string    `json:"connectionMode"`
+	EntitlementID      string    `json:"entitlementId"`
+	UserID             string    `json:"userId"`
+	SubscriptionID     string    `json:"subscriptionId"`
+	ClientIP           string    `json:"clientIp"`
+	PlanCode           string    `json:"planCode"`
+	ConnectionMode     string    `json:"connectionMode"`
 	DataLimitBytes     int64     `json:"dataLimitBytes"`
 	UnlimitedBandwidth bool      `json:"unlimitedBandwidth"`
-	UsedBytes      int64     `json:"usedBytes"`
-	RemainingBytes int64     `json:"remainingBytes"`
-	ExpiresAt      time.Time `json:"expiresAt"`
+	UsedBytes          int64     `json:"usedBytes"`
+	RemainingBytes     int64     `json:"remainingBytes"`
+	ExpiresAt          time.Time `json:"expiresAt"`
 }
 
 type Snapshot struct {
