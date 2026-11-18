@@ -15,6 +15,7 @@ type Item struct {
 	PlanCode       string    `json:"planCode"`
 	ConnectionMode string    `json:"connectionMode"`
 	DataLimitBytes int64     `json:"dataLimitBytes"`
+ UnlimitedBandwidth bool `json:"unlimitedBandwidth"`
 	UsedBytes      int64     `json:"usedBytes"`
 	RemainingBytes int64     `json:"remainingBytes"`
 	ExpiresAt      time.Time `json:"expiresAt"`
@@ -160,9 +161,9 @@ func (s *Store) AccessSnapshot() (uint64, []Grant) {
 	return s.accessRevision, result
 }
 
-// Only zero represents unlimited bandwidth. Negative limits fail closed.
+// Unlimited bandwidth must be explicitly granted; zero quota is not unlimited.
 func usableBandwidth(item Item) bool {
-	return item.DataLimitBytes == 0 || (item.DataLimitBytes > 0 && item.RemainingBytes > 0)
+	return item.UnlimitedBandwidth || (item.DataLimitBytes > 0 && item.RemainingBytes > 0)
 }
 
 func (s *Store) Count() int {
