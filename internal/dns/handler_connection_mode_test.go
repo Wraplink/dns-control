@@ -71,9 +71,9 @@ func TestPerClientModeChangesActualDNSAnswer(t *testing.T) {
 	access := entitlement.NewStore(time.Minute)
 	expires := time.Now().Add(time.Hour)
 	access.Replace(entitlement.Snapshot{Entitlements: []entitlement.Item{
-		{ClientIP: "203.0.113.10", ConnectionMode: "gaming", RemainingBytes: 1000, ExpiresAt: expires},
-		{ClientIP: "203.0.113.11", ConnectionMode: "streaming", RemainingBytes: 1000, ExpiresAt: expires},
-		{ClientIP: "203.0.113.12", ConnectionMode: "smart", RemainingBytes: 1000, ExpiresAt: expires},
+		{ClientIP: "203.0.113.10", ConnectionMode: "gaming", DataLimitBytes: 2000, RemainingBytes: 1000, ExpiresAt: expires},
+		{ClientIP: "203.0.113.11", ConnectionMode: "streaming", DataLimitBytes: 2000, RemainingBytes: 1000, ExpiresAt: expires},
+		{ClientIP: "203.0.113.12", ConnectionMode: "smart", DataLimitBytes: 2000, RemainingBytes: 1000, ExpiresAt: expires},
 	}})
 
 	agents := agentregistry.NewStore()
