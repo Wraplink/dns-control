@@ -14,7 +14,7 @@ type Item struct {
 	ClientIP       string    `json:"clientIp"`
 	PlanCode       string    `json:"planCode"`
 	ConnectionMode string    `json:"connectionMode"`
-	DataLimitBytes int64     `json:"dataLimitBytes"`
+	DataLimitBytes     int64     `json:"dataLimitBytes"`
 	UnlimitedBandwidth bool      `json:"unlimitedBandwidth"`
 	UsedBytes      int64     `json:"usedBytes"`
 	RemainingBytes int64     `json:"remainingBytes"`
