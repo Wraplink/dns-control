@@ -11,10 +11,10 @@ func TestAllowedUsesFreshUsableSnapshot(t *testing.T) {
 	store.Replace(Snapshot{
 		Entitlements: []Item{
 			{
-				ClientIP:       "203.0.113.10",
-				DataLimitBytes: 2048,
-				RemainingBytes: 1024,
-				ExpiresAt:      time.Now().UTC().Add(time.Hour),
+				ClientIP:	"203.0.113.10",
+				DataLimitBytes:	2048,
+				RemainingBytes:	1024,
+				ExpiresAt:	time.Now().UTC().Add(time.Hour),
 			},
 		},
 	})
@@ -32,16 +32,16 @@ func TestReplaceDropsExpiredOrExhaustedItems(t *testing.T) {
 	store.Replace(Snapshot{
 		Entitlements: []Item{
 			{
-				ClientIP:       "203.0.113.10",
-				DataLimitBytes: 1024,
-				RemainingBytes: 0,
-				ExpiresAt:      time.Now().UTC().Add(time.Hour),
+				ClientIP:	"203.0.113.10",
+				DataLimitBytes:	1024,
+				RemainingBytes:	0,
+				ExpiresAt:	time.Now().UTC().Add(time.Hour),
 			},
 			{
-				ClientIP:       "203.0.113.11",
-				DataLimitBytes: 2048,
-				RemainingBytes: 1024,
-				ExpiresAt:      time.Now().UTC().Add(-time.Second),
+				ClientIP:	"203.0.113.11",
+				DataLimitBytes:	2048,
+				RemainingBytes:	1024,
+				ExpiresAt:	time.Now().UTC().Add(-time.Second),
 			},
 		},
 	})
@@ -56,10 +56,10 @@ func TestAllowedFailsClosedAfterSnapshotBecomesStale(t *testing.T) {
 	store.Replace(Snapshot{
 		Entitlements: []Item{
 			{
-				ClientIP:       "203.0.113.10",
-				DataLimitBytes: 2048,
-				RemainingBytes: 1024,
-				ExpiresAt:      time.Now().UTC().Add(time.Hour),
+				ClientIP:	"203.0.113.10",
+				DataLimitBytes:	2048,
+				RemainingBytes:	1024,
+				ExpiresAt:	time.Now().UTC().Add(time.Hour),
 			},
 		},
 	})
@@ -78,12 +78,12 @@ func TestAccessSnapshotAdvancesRevisionWhenMembershipChanges(t *testing.T) {
 	store.Replace(Snapshot{
 		Entitlements: []Item{
 			{
-				EntitlementID:  "ent-1",
-				SubscriptionID: "sub-1",
-				ClientIP:       "203.0.113.10",
-				DataLimitBytes: 2048,
-				RemainingBytes: 1024,
-				ExpiresAt:      expiresAt,
+				EntitlementID:	"ent-1",
+				SubscriptionID:	"sub-1",
+				ClientIP:	"203.0.113.10",
+				DataLimitBytes:	2048,
+				RemainingBytes:	1024,
+				ExpiresAt:	expiresAt,
 			},
 		},
 	})
@@ -96,12 +96,12 @@ func TestAccessSnapshotAdvancesRevisionWhenMembershipChanges(t *testing.T) {
 	store.Replace(Snapshot{
 		Entitlements: []Item{
 			{
-				EntitlementID:  "ent-1",
-				SubscriptionID: "sub-1",
-				ClientIP:       "203.0.113.10",
-				DataLimitBytes: 2048,
-				RemainingBytes: 512,
-				ExpiresAt:      expiresAt,
+				EntitlementID:	"ent-1",
+				SubscriptionID:	"sub-1",
+				ClientIP:	"203.0.113.10",
+				DataLimitBytes:	2048,
+				RemainingBytes:	512,
+				ExpiresAt:	expiresAt,
 			},
 		},
 	})
@@ -123,12 +123,12 @@ func TestAccessSnapshotRevokesOnceWhenBackendSnapshotBecomesStale(t *testing.T) 
 	store.Replace(Snapshot{
 		Entitlements: []Item{
 			{
-				EntitlementID:  "ent-1",
-				SubscriptionID: "sub-1",
-				ClientIP:       "203.0.113.10",
-				DataLimitBytes: 2048,
-				RemainingBytes: 1024,
-				ExpiresAt:      time.Now().UTC().Add(time.Hour),
+				EntitlementID:	"ent-1",
+				SubscriptionID:	"sub-1",
+				ClientIP:	"203.0.113.10",
+				DataLimitBytes:	2048,
+				RemainingBytes:	1024,
+				ExpiresAt:	time.Now().UTC().Add(time.Hour),
 			},
 		},
 	})
@@ -152,10 +152,10 @@ func TestReplaceCanonicalizesIPv4(t *testing.T) {
 	store.Replace(Snapshot{
 		Entitlements: []Item{
 			{
-				ClientIP:       "203.0.113.010",
-				DataLimitBytes: 2048,
-				RemainingBytes: 1024,
-				ExpiresAt:      time.Now().UTC().Add(time.Hour),
+				ClientIP:	"203.0.113.010",
+				DataLimitBytes:	2048,
+				RemainingBytes:	1024,
+				ExpiresAt:	time.Now().UTC().Add(time.Hour),
 			},
 		},
 	})
@@ -195,13 +195,13 @@ func TestConnectionModesStoredBySourceIP(t *testing.T) {
 func TestUnlimitedEntitlementRemainsAuthorized(t *testing.T) {
 	store := NewStore(time.Minute)
 	store.Replace(Snapshot{Entitlements: []Item{{
-		EntitlementID:      "unlimited-1",
-		SubscriptionID:     "subscription-1",
-		ClientIP:           "203.0.113.50",
-		DataLimitBytes:     0,
-		UnlimitedBandwidth: true,
-		RemainingBytes:     0,
-		ExpiresAt:          time.Now().UTC().Add(time.Hour),
+		EntitlementID:	"unlimited-1",
+		SubscriptionID:	"subscription-1",
+		ClientIP:		"203.0.113.50",
+		DataLimitBytes:	0,
+		UnlimitedBandwidth:	true,
+		RemainingBytes:	0,
+		ExpiresAt:		time.Now().UTC().Add(time.Hour),
 	}}})
 	if !store.Allowed(net.ParseIP("203.0.113.50")) {
 		t.Fatal("unlimited entitlement should be authorized")
@@ -218,11 +218,11 @@ func TestAccessSnapshotTracksIPOwnershipHandover(t *testing.T) {
 	ip := "203.0.113.60"
 
 	store.Replace(Snapshot{Entitlements: []Item{{
-		EntitlementID:      "old-entitlement",
-		SubscriptionID:     "old-subscription",
-		ClientIP:           ip,
-		UnlimitedBandwidth: true,
-		ExpiresAt:          expiresAt,
+		EntitlementID:	"old-entitlement",
+		SubscriptionID:	"old-subscription",
+		ClientIP:		ip,
+		UnlimitedBandwidth:	true,
+		ExpiresAt:		expiresAt,
 	}}})
 	firstRevision, firstGrants := store.AccessSnapshot()
 	if len(firstGrants) != 1 || firstGrants[0].EntitlementID != "old-entitlement" {
@@ -236,11 +236,11 @@ func TestAccessSnapshotTracksIPOwnershipHandover(t *testing.T) {
 	}
 
 	store.Replace(Snapshot{Entitlements: []Item{{
-		EntitlementID:      "new-entitlement",
-		SubscriptionID:     "new-subscription",
-		ClientIP:           ip,
-		UnlimitedBandwidth: true,
-		ExpiresAt:          expiresAt,
+		EntitlementID:	"new-entitlement",
+		SubscriptionID:	"new-subscription",
+		ClientIP:		ip,
+		UnlimitedBandwidth:	true,
+		ExpiresAt:		expiresAt,
 	}}})
 	newRevision, newGrants := store.AccessSnapshot()
 	if newRevision != revokedRevision+1 || len(newGrants) != 1 || newGrants[0].EntitlementID != "new-entitlement" {
@@ -267,9 +267,9 @@ func TestConflictingIPOwnersFailClosed(t *testing.T) {
 func TestInvalidNegativeBandwidthLimitFailsClosed(t *testing.T) {
 	store := NewStore(time.Minute)
 	store.Replace(Snapshot{Entitlements: []Item{{
-		EntitlementID:  "invalid", ClientIP: "203.0.113.91",
-		DataLimitBytes: -1, RemainingBytes: 100,
-		ExpiresAt:      time.Now().UTC().Add(time.Hour),
+		EntitlementID:	"invalid", ClientIP: "203.0.113.91",
+		DataLimitBytes:	-1, RemainingBytes: 100,
+		ExpiresAt:	time.Now().UTC().Add(time.Hour),
 	}}})
 	if store.Allowed(net.ParseIP("203.0.113.91")) {
 		t.Fatal("negative data limit must not authorize a client")
