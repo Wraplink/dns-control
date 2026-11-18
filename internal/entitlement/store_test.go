@@ -195,13 +195,13 @@ func TestConnectionModesStoredBySourceIP(t *testing.T) {
 func TestUnlimitedEntitlementRemainsAuthorized(t *testing.T) {
 	store := NewStore(time.Minute)
 	store.Replace(Snapshot{Entitlements: []Item{{
-		EntitlementID:  "unlimited-1",
-		SubscriptionID: "subscription-1",
-		ClientIP:       "203.0.113.50",
-		DataLimitBytes: 0,
+		EntitlementID:      "unlimited-1",
+		SubscriptionID:     "subscription-1",
+		ClientIP:           "203.0.113.50",
+		DataLimitBytes:     0,
 		UnlimitedBandwidth: true,
-		RemainingBytes: 0,
-		ExpiresAt:      time.Now().UTC().Add(time.Hour),
+		RemainingBytes:     0,
+		ExpiresAt:          time.Now().UTC().Add(time.Hour),
 	}}})
 	if !store.Allowed(net.ParseIP("203.0.113.50")) {
 		t.Fatal("unlimited entitlement should be authorized")
@@ -218,11 +218,11 @@ func TestAccessSnapshotTracksIPOwnershipHandover(t *testing.T) {
 	ip := "203.0.113.60"
 
 	store.Replace(Snapshot{Entitlements: []Item{{
-		EntitlementID:  "old-entitlement",
-		SubscriptionID: "old-subscription",
-		ClientIP:       ip,
+		EntitlementID:      "old-entitlement",
+		SubscriptionID:     "old-subscription",
+		ClientIP:           ip,
 		UnlimitedBandwidth: true,
-		ExpiresAt:      expiresAt,
+		ExpiresAt:          expiresAt,
 	}}})
 	firstRevision, firstGrants := store.AccessSnapshot()
 	if len(firstGrants) != 1 || firstGrants[0].EntitlementID != "old-entitlement" {
@@ -236,11 +236,11 @@ func TestAccessSnapshotTracksIPOwnershipHandover(t *testing.T) {
 	}
 
 	store.Replace(Snapshot{Entitlements: []Item{{
-		EntitlementID:  "new-entitlement",
-		SubscriptionID: "new-subscription",
-		ClientIP:       ip,
+		EntitlementID:      "new-entitlement",
+		SubscriptionID:     "new-subscription",
+		ClientIP:           ip,
 		UnlimitedBandwidth: true,
-		ExpiresAt:      expiresAt,
+		ExpiresAt:          expiresAt,
 	}}})
 	newRevision, newGrants := store.AccessSnapshot()
 	if newRevision != revokedRevision+1 || len(newGrants) != 1 || newGrants[0].EntitlementID != "new-entitlement" {
@@ -267,9 +267,9 @@ func TestConflictingIPOwnersFailClosed(t *testing.T) {
 func TestInvalidNegativeBandwidthLimitFailsClosed(t *testing.T) {
 	store := NewStore(time.Minute)
 	store.Replace(Snapshot{Entitlements: []Item{{
-		EntitlementID: "invalid", ClientIP: "203.0.113.91",
+		EntitlementID:  "invalid", ClientIP: "203.0.113.91",
 		DataLimitBytes: -1, RemainingBytes: 100,
-		ExpiresAt: time.Now().UTC().Add(time.Hour),
+		ExpiresAt:      time.Now().UTC().Add(time.Hour),
 	}}})
 	if store.Allowed(net.ParseIP("203.0.113.91")) {
 		t.Fatal("negative data limit must not authorize a client")
