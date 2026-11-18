@@ -269,3 +269,18 @@ func TestInvalidNegativeBandwidthLimitFailsClosed(t *testing.T) {
 		t.Fatalf("invalid bandwidth limit leaked into access grants: %+v", grants)
 	}
 }
+
+func TestZeroLimitWithoutUnlimitedFlagFailsClosed(t *testing.T) {
+	store := NewStore(time.Minute)
+	store.Replace(Snapshot{Entitlements: []Item{{
+		ClientIP: "203.0.113.92", DataLimitBytes: 0,
+		RemainingBytes: 100, ExpiresAt: time.Now().UTC().Add(time.Hour),
+	}}})
+	if store.Allowed(net.ParseIP("203.0.113.92")) {
+		t.Fatal("zero limit without explicit unlimited flag must not authorize")
+	}
+	_, grants := store.AccessSnapshot()
+	if len(grants) != 0 {
+		t.Fatalf("zero-limit finite entitlement leaked into grants: %+v", grants)
+	}
+}
