@@ -13,7 +13,7 @@ func TestAllowedUsesFreshUsableSnapshot(t *testing.T) {
 			{
 				ClientIP:       "203.0.113.10",
 				RemainingBytes: 1024, DataLimitBytes: 2048,
-				ExpiresAt:      time.Now().UTC().Add(time.Hour),
+				ExpiresAt: time.Now().UTC().Add(time.Hour),
 			},
 		},
 	})
@@ -39,7 +39,7 @@ func TestReplaceDropsExpiredOrExhaustedItems(t *testing.T) {
 			{
 				ClientIP:       "203.0.113.11",
 				RemainingBytes: 1024, DataLimitBytes: 2048,
-				ExpiresAt:      time.Now().UTC().Add(-time.Second),
+				ExpiresAt: time.Now().UTC().Add(-time.Second),
 			},
 		},
 	})
@@ -56,7 +56,7 @@ func TestAllowedFailsClosedAfterSnapshotBecomesStale(t *testing.T) {
 			{
 				ClientIP:       "203.0.113.10",
 				RemainingBytes: 1024, DataLimitBytes: 2048,
-				ExpiresAt:      time.Now().UTC().Add(time.Hour),
+				ExpiresAt: time.Now().UTC().Add(time.Hour),
 			},
 		},
 	})
@@ -79,7 +79,7 @@ func TestAccessSnapshotAdvancesRevisionWhenMembershipChanges(t *testing.T) {
 				SubscriptionID: "sub-1",
 				ClientIP:       "203.0.113.10",
 				RemainingBytes: 1024, DataLimitBytes: 2048,
-				ExpiresAt:      expiresAt,
+				ExpiresAt: expiresAt,
 			},
 		},
 	})
@@ -96,7 +96,7 @@ func TestAccessSnapshotAdvancesRevisionWhenMembershipChanges(t *testing.T) {
 				SubscriptionID: "sub-1",
 				ClientIP:       "203.0.113.10",
 				RemainingBytes: 512, DataLimitBytes: 2048,
-				ExpiresAt:      expiresAt,
+				ExpiresAt: expiresAt,
 			},
 		},
 	})
@@ -122,7 +122,7 @@ func TestAccessSnapshotRevokesOnceWhenBackendSnapshotBecomesStale(t *testing.T) 
 				SubscriptionID: "sub-1",
 				ClientIP:       "203.0.113.10",
 				RemainingBytes: 1024, DataLimitBytes: 2048,
-				ExpiresAt:      time.Now().UTC().Add(time.Hour),
+				ExpiresAt: time.Now().UTC().Add(time.Hour),
 			},
 		},
 	})
@@ -148,7 +148,7 @@ func TestReplaceCanonicalizesIPv4(t *testing.T) {
 			{
 				ClientIP:       "203.0.113.010",
 				RemainingBytes: 1024, DataLimitBytes: 2048,
-				ExpiresAt:      time.Now().UTC().Add(time.Hour),
+				ExpiresAt: time.Now().UTC().Add(time.Hour),
 			},
 		},
 	})
@@ -213,7 +213,7 @@ func TestAccessSnapshotTracksIPOwnershipHandover(t *testing.T) {
 		EntitlementID:  "old-entitlement",
 		SubscriptionID: "old-subscription",
 		ClientIP:       ip, UnlimitedBandwidth: true,
-		ExpiresAt:      expiresAt,
+		ExpiresAt: expiresAt,
 	}}})
 	firstRevision, firstGrants := store.AccessSnapshot()
 	if len(firstGrants) != 1 || firstGrants[0].EntitlementID != "old-entitlement" {
@@ -230,7 +230,7 @@ func TestAccessSnapshotTracksIPOwnershipHandover(t *testing.T) {
 		EntitlementID:  "new-entitlement",
 		SubscriptionID: "new-subscription",
 		ClientIP:       ip, UnlimitedBandwidth: true,
-		ExpiresAt:      expiresAt,
+		ExpiresAt: expiresAt,
 	}}})
 	newRevision, newGrants := store.AccessSnapshot()
 	if newRevision != revokedRevision+1 || len(newGrants) != 1 || newGrants[0].EntitlementID != "new-entitlement" {
