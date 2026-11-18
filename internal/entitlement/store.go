@@ -15,7 +15,7 @@ type Item struct {
 	PlanCode       string    `json:"planCode"`
 	ConnectionMode string    `json:"connectionMode"`
 	DataLimitBytes int64     `json:"dataLimitBytes"`
- UnlimitedBandwidth bool `json:"unlimitedBandwidth"`
+	UnlimitedBandwidth bool      `json:"unlimitedBandwidth"`
 	UsedBytes      int64     `json:"usedBytes"`
 	RemainingBytes int64     `json:"remainingBytes"`
 	ExpiresAt      time.Time `json:"expiresAt"`
