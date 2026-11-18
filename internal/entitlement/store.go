@@ -163,7 +163,7 @@ func (s *Store) AccessSnapshot() (uint64, []Grant) {
 
 // Unlimited bandwidth must be explicitly granted; zero quota is not unlimited.
 func usableBandwidth(item Item) bool {
-	return item.UnlimitedBandwidth || (item.DataLimitBytes > 0 && item.RemainingBytes > 0)
+	return item.DataLimitBytes >= 0 && (item.UnlimitedBandwidth && item.DataLimitBytes == 0 || !item.UnlimitedBandwidth && item.DataLimitBytes > 0 && item.RemainingBytes > 0)
 }
 
 func (s *Store) Count() int {
