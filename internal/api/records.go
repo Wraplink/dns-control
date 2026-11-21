@@ -20,12 +20,18 @@ type recordAnswer struct {
 	TTL   uint32 `json:"ttl"`
 }
 
+type recordQueryResult struct {
+	Type  string `json:"type"`
+	Rcode string `json:"rcode"`
+}
+
 type recordsResponse struct {
 	Domain     string         `json:"domain"`
 	Rcode      string         `json:"rcode"`
 	Answers    []recordAnswer `json:"answers"`
 	Authority  []recordAnswer `json:"authority"`
 	Additional []recordAnswer `json:"additional"`
+	Queries    []recordQueryResult `json:"queries"`
 }
 
 // resolveRecords performs origin (not managed-policy) DNS lookups through the
@@ -62,7 +68,7 @@ func (h *Handler) resolveRecords(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "too many record types"})
 		return
 	}
-	out := recordsResponse{Domain: strings.TrimSuffix(name, "."), Rcode: "NOERROR", Answers: []recordAnswer{}, Authority: []recordAnswer{}, Additional: []recordAnswer{}}
+	out := recordsResponse{Domain: strings.TrimSuffix(name, "."), Rcode: "NOERROR", Answers: []recordAnswer{}, Authority: []recordAnswer{}, Additional: []recordAnswer{}, Queries: []recordQueryResult{}}
 	for _, typ := range types {
 		t, ok := mdns.StringToType[strings.ToUpper(strings.TrimSpace(typ))]
 		if !ok || t == mdns.TypeANY || t == mdns.TypeAXFR || t == mdns.TypeIXFR {
@@ -76,8 +82,10 @@ func (h *Handler) resolveRecords(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "origin DNS lookup failed"})
 			return
 		}
+		rcode := mdns.RcodeToString[response.Rcode]
+		out.Queries = append(out.Queries, recordQueryResult{Type: mdns.TypeToString[t], Rcode: rcode})
 		if response.Rcode != mdns.RcodeSuccess {
-			out.Rcode = mdns.RcodeToString[response.Rcode]
+			out.Rcode = rcode
 		}
 		for _, rr := range response.Answer {
 			out.Answers = append(out.Answers, convertRecord(rr))
