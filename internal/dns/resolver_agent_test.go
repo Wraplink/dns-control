@@ -41,7 +41,7 @@ func TestClientResolutionUsesConfiguredAgent(t *testing.T) {
 		reply.SetReply(&question)
 		reply.Answer = []mdns.RR{&mdns.A{
 			Hdr: mdns.RR_Header{Name: question.Question[0].Name, Rrtype: mdns.TypeA, Class: mdns.ClassINET, Ttl: 123},
-			A: []byte{192, 0, 2, 42},
+			A:   []byte{192, 0, 2, 42},
 		}}
 		wire, err := reply.Pack()
 		if err != nil {
