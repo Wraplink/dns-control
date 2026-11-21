@@ -48,7 +48,8 @@ func (h *Handler) resolveRecords(w http.ResponseWriter, r *http.Request) {
   return
  }
  name := strings.TrimSpace(req.Domain)
- if name == "" || len(name) > 253 || !mdns.IsDomainName(name) {
+ _, validName := mdns.IsDomainName(name)
+ if name == "" || len(name) > 253 || !validName {
   writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid domain"})
   return
  }
