@@ -141,3 +141,20 @@ func TestResolveRecordsNXDOMAIN(t *testing.T) {
 		t.Fatalf("unexpected negative response: %+v", got)
 	}
 }
+
+func TestResolveRecordsOriginFailure(t *testing.T) {
+	// A closed loopback UDP port gives a deterministic transport error.
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := pc.LocalAddr().String()
+	_ = pc.Close()
+	h := &Handler{resolver: dns.NewResolver([]string{address})}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dns/resolve-records", strings.NewReader(`{"domain":"example.com","types":["A"]}`))
+	rec := httptest.NewRecorder()
+	h.resolveRecords(rec, req)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status=%d, want 502: %s", rec.Code, rec.Body.String())
+	}
+}
