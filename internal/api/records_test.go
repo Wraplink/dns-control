@@ -1,9 +1,9 @@
 package api
 
 import (
-	"net/http"
 	"encoding/json"
 	"net"
+	"net/http"
 	"time"
 
 	mdns "github.com/miekg/dns"
@@ -65,12 +65,17 @@ func TestResolveRecordsMultipleAddresses(t *testing.T) {
 	// A local deterministic DNS server exercises the real resolver without
 	// requiring public DNS or the production Edge Agent.
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer pc.Close()
 	server := &mdns.Server{PacketConn: pc, Handler: mdns.HandlerFunc(func(w mdns.ResponseWriter, r *mdns.Msg) {
 		m := new(mdns.Msg)
 		m.SetReply(r)
-		if len(r.Question) != 1 { _ = w.WriteMsg(m); return }
+		if len(r.Question) != 1 {
+			_ = w.WriteMsg(m)
+			return
+		}
 		switch r.Question[0].Qtype {
 		case mdns.TypeA:
 			for _, ip := range []string{"192.0.2.10", "192.0.2.11"} {
@@ -92,10 +97,16 @@ func TestResolveRecordsMultipleAddresses(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/dns/resolve-records", strings.NewReader(`{"domain":"example.com"}`))
 	rec := httptest.NewRecorder()
 	h.resolveRecords(rec, req)
-	if rec.Code != http.StatusOK { t.Fatalf("status=%d: %s", rec.Code, rec.Body.String()) }
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d: %s", rec.Code, rec.Body.String())
+	}
 	var got recordsResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil { t.Fatal(err) }
-	if got.Rcode != "NOERROR" || len(got.Answers) != 3 { t.Fatalf("unexpected response: %+v", got) }
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Rcode != "NOERROR" || len(got.Answers) != 3 {
+		t.Fatalf("unexpected response: %+v", got)
+	}
 	if got.Answers[0].Type != "A" || got.Answers[0].TTL != 120 || got.Answers[1].Value != "192.0.2.11" || got.Answers[2].Type != "AAAA" || got.Answers[2].TTL != 180 {
 		t.Fatalf("unexpected records: %+v", got.Answers)
 	}
