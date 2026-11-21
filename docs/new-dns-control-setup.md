@@ -93,3 +93,35 @@ Production deployments should implement certificate renewal and restrictive fire
 ## Backend-authoritative agent snapshots
 
 After upgrading Backend and Edge Agents, verify the Backend `network_agent_health` table contains fresh online agent heartbeats. Then add `WRAPLINK_BACKEND_AGENT_SNAPSHOT_ENABLED=true` to the DNS Control container environment (not only an unpassed host shell variable) and recreate DNS Control. Leave unset/false during initial deployment or rollback. Snapshot pages must share one revision; investigate synchronization errors before switching traffic. See [coordinated rollout](https://github.com/Wraplink/backend/blob/master/docs/agent-registry-rollout.md).
+
+## Optional Edge Agent origin resolver (experimental)
+
+DNS Control can delegate **management origin lookups** received at
+`POST /api/v1/dns/resolve` to an Edge Agent instead of using its local
+upstream DNS resolvers. This is **disabled by default** and does not change
+ordinary client DNS queries or managed hijack answers.
+
+In `config.yaml`, uncomment:
+
+```yaml
+dns:
+  origin_agent_url: "https://edge-resolver.example.com"
+  origin_agent_token: "${DNS_ORIGIN_AGENT_TOKEN}"
+```
+
+The URL must be an HTTPS origin without a path. The token must be at least
+32 characters and must be provisioned to the agent's origin-resolution API.
+The agent must implement authenticated `POST /api/v1/dns/resolve`, accept
+`application/dns-message` requests, and return an unmodified DNS wire
+response with matching request ID and question. This endpoint is **not yet
+implemented in the Edge Agent repository**; do not enable this setting in
+production until the agent implementation is deployed and tested.
+
+Agent resolution is fail-closed: HTTP failures, timeouts, or an NXDOMAIN
+response do not trigger fallback to local DNS. Avoid recursive loops: the
+agent must resolve via its independent upstream resolvers, never through
+WrapLink's managed/hijacked DNS service.
+
+This option currently applies to the DNS Control management resolve API.
+Edge Agent lease activation still resolves locally until its integration
+is updated to request origin resolution through DNS Control.
