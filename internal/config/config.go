@@ -26,6 +26,8 @@ type DNSConfig struct {
 	AllowLoopbackQueries bool     `yaml:"allow_loopback_queries"`
 	ParentURL            string   `yaml:"parent_url"`
 	ParentToken          string   `yaml:"parent_token"`
+	OriginAgentURL       string   `yaml:"origin_agent_url"`
+	OriginAgentToken     string   `yaml:"origin_agent_token"`
 }
 
 type APIConfig struct {
@@ -121,6 +123,17 @@ func (c Config) Validate() error {
 		if len(c.DNS.ParentToken) < 32 {
 			return fmt.Errorf("dns.parent_token must contain at least 32 characters")
 		}
+	}
+	if c.DNS.OriginAgentURL != "" {
+		u, err := url.Parse(c.DNS.OriginAgentURL)
+		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
+			return fmt.Errorf("dns.origin_agent_url must be an HTTPS origin without path, credentials or query")
+		}
+		if len(c.DNS.OriginAgentToken) < 32 {
+			return fmt.Errorf("dns.origin_agent_token must contain at least 32 characters")
+		}
+	} else if c.DNS.OriginAgentToken != "" {
+		return fmt.Errorf("dns.origin_agent_token requires dns.origin_agent_url")
 	}
 	if c.DNS.TTL == 0 {
 		return fmt.Errorf("dns.ttl must be greater than zero")
