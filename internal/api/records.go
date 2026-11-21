@@ -68,13 +68,17 @@ func (h *Handler) resolveRecords(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "too many record types"})
 		return
 	}
-	out := recordsResponse{Domain: strings.TrimSuffix(name, "."), Rcode: "NOERROR", Answers: []recordAnswer{}, Authority: []recordAnswer{}, Additional: []recordAnswer{}, Queries: []recordQueryResult{}}
+	queryTypes := make([]uint16, 0, len(types))
 	for _, typ := range types {
 		t, ok := mdns.StringToType[strings.ToUpper(strings.TrimSpace(typ))]
 		if !ok || t == mdns.TypeANY || t == mdns.TypeAXFR || t == mdns.TypeIXFR {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported DNS record type"})
 			return
 		}
+		queryTypes = append(queryTypes, t)
+	}
+	out := recordsResponse{Domain: strings.TrimSuffix(name, "."), Rcode: "NOERROR", Answers: []recordAnswer{}, Authority: []recordAnswer{}, Additional: []recordAnswer{}, Queries: []recordQueryResult{}}
+	for _, t := range queryTypes {
 		query := new(mdns.Msg)
 		query.SetQuestion(name, t)
 		response, err := h.resolver.ResolveOrigin(r.Context(), query)
