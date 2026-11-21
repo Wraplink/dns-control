@@ -1,6 +1,7 @@
 package dns
 
 import (
+	"context"
 	"log"
 	"net"
 	"strings"
@@ -124,7 +125,9 @@ func (h *Handler) handleNormal(
 	w mdns.ResponseWriter,
 	req *mdns.Msg,
 ) {
-	resp, err := h.resolver.Resolve(req)
+	// Normal client queries use the designated origin agent when configured.
+	// Managed policy answers and entitlement checks are handled before this path.
+	resp, err := h.resolver.ResolveOrigin(context.Background(), req)
 	if err != nil {
 		log.Printf("dns: upstream resolution failed: %v", err)
 		h.serverFailure(w, req)
