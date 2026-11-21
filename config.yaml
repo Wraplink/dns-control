@@ -10,9 +10,11 @@ dns:
   # parent_url: "https://master-dns.example.com"
   # parent_token: "${PARENT_DNS_CONTROL_TOKEN}"
   # Optional: delegate management origin lookups to an Edge Agent with an
-  # authenticated HTTPS /api/v1/dns/resolve endpoint. Not for client queries.
+  # authenticated /api/v1/dns/resolve endpoint. Not for client queries.
+  # WARNING: HTTP transmits the bearer token in plaintext; restrict access to a
+  # trusted private network or use a secure tunnel.
   # Default origin resolver endpoint. Delegation activates only when the token is set.
-  origin_agent_url: "https://edge-resolver.wraplink.ir"
+  origin_agent_url: "http://edge-resolver.wraplink.ir:9092"
   origin_agent_token: "${DNS_ORIGIN_AGENT_TOKEN}"
 
 api:
