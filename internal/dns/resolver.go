@@ -28,11 +28,13 @@ func parentHopCount(ctx context.Context) int {
 }
 
 type Resolver struct {
-	client      *mdns.Client
-	upstreams   []string
-	parentURL   string
-	parentToken string
-	httpClient  *http.Client
+	client           *mdns.Client
+	upstreams        []string
+	parentURL        string
+	parentToken      string
+	originAgentURL   string
+	originAgentToken string
+	httpClient       *http.Client
 }
 
 func NewResolver(upstreams []string) *Resolver {
@@ -50,6 +52,55 @@ func NewResolver(upstreams []string) *Resolver {
 func (r *Resolver) SetParent(url, token string) {
 	r.parentURL = strings.TrimRight(strings.TrimSpace(url), "/")
 	r.parentToken = token
+}
+
+// SetOriginAgent enables authenticated agent-based origin resolution for
+// management lookups only. Ordinary client DNS queries keep their local upstreams.
+func (r *Resolver) SetOriginAgent(url, token string) {
+	r.originAgentURL = strings.TrimRight(strings.TrimSpace(url), "/")
+	r.originAgentToken = token
+}
+
+// ResolveOrigin resolves an unmodified upstream answer, never a managed DNS
+// policy. When enabled, agent resolution is authoritative: errors and NXDOMAIN
+// are returned without falling back to a different network vantage point.
+func (r *Resolver) ResolveOrigin(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error) {
+	if r.originAgentURL == "" {
+		return r.ResolveContext(ctx, req)
+	}
+	if req == nil || len(req.Question) != 1 {
+		return nil, fmt.Errorf("origin DNS request must have one question")
+	}
+	wire, err := req.Pack()
+	if err != nil {
+		return nil, err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, r.originAgentURL+"/api/v1/dns/resolve", bytes.NewReader(wire))
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-Type", "application/dns-message")
+	request.Header.Set("Authorization", "Bearer "+r.originAgentToken)
+	response, err := r.httpClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("agent origin DNS request: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("agent origin DNS returned HTTP %d", response.StatusCode)
+	}
+	payload, err := io.ReadAll(io.LimitReader(response.Body, 65537))
+	if err != nil || len(payload) > 65536 {
+		return nil, fmt.Errorf("invalid agent DNS response size")
+	}
+	var result mdns.Msg
+	if err := result.Unpack(payload); err != nil {
+		return nil, err
+	}
+	if !result.Response || result.Id != req.Id || len(result.Question) != 1 || result.Question[0] != req.Question[0] {
+		return nil, fmt.Errorf("agent origin DNS response does not match question")
+	}
+	return &result, nil
 }
 
 func (r *Resolver) resolveParent(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error) {

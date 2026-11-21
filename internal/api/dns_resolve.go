@@ -44,7 +44,7 @@ func (h *Handler) resolveDNS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid DNS question", http.StatusBadRequest)
 		return
 	}
-	response, err := h.resolver.ResolveContext(dns.WithParentHopCount(r.Context(), hops), &query)
+	response, err := h.resolver.ResolveOrigin(dns.WithParentHopCount(r.Context(), hops), &query)
 	if err != nil {
 		http.Error(w, "upstream DNS resolution failed", http.StatusBadGateway)
 		return

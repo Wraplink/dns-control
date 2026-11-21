@@ -37,7 +37,7 @@ func (h *Handler) resolveOriginIPv4(w http.ResponseWriter, r *http.Request) {
 	}
 	msg := new(mdns.Msg)
 	msg.SetQuestion(mdns.Fqdn(domain), mdns.TypeA)
-	answer, err := h.resolver.ResolveContext(r.Context(), msg)
+	answer, err := h.resolver.ResolveOrigin(r.Context(), msg)
 	if err != nil || answer == nil || answer.Rcode != mdns.RcodeSuccess {
 		http.Error(w, "origin resolution failed", http.StatusBadGateway)
 		return

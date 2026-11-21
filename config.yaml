@@ -9,6 +9,10 @@ dns:
   # Parent must expose /api/v1/dns/resolve over HTTPS.
   # parent_url: "https://master-dns.example.com"
   # parent_token: "${PARENT_DNS_CONTROL_TOKEN}"
+  # Optional: delegate management origin lookups to an Edge Agent with an
+  # authenticated HTTPS /api/v1/dns/resolve endpoint. Not for client queries.
+  # origin_agent_url: "https://edge-resolver.example.com"
+  # origin_agent_token: "${DNS_ORIGIN_AGENT_TOKEN}"
 
 api:
   listen: ${API_LISTEN}
