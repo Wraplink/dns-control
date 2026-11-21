@@ -117,7 +117,7 @@ func (c Config) Validate() error {
 	}
 	if c.DNS.ParentURL != "" {
 		u, err := url.Parse(c.DNS.ParentURL)
-		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 			return fmt.Errorf("dns.parent_url must be an HTTPS URL without credentials or query")
 		}
 		if len(c.DNS.ParentToken) < 32 {
@@ -127,7 +127,7 @@ func (c Config) Validate() error {
 	if c.DNS.OriginAgentURL != "" {
 		u, err := url.Parse(c.DNS.OriginAgentURL)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
-			return fmt.Errorf("dns.origin_agent_url must be an HTTPS origin without path, credentials or query")
+			return fmt.Errorf("dns.origin_agent_url must be an HTTP(S) origin without path, credentials or query")
 		}
 		if c.DNS.OriginAgentToken != "" && len(c.DNS.OriginAgentToken) < 32 {
 			return fmt.Errorf("dns.origin_agent_token must contain at least 32 characters")
