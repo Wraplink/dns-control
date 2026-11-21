@@ -11,8 +11,9 @@ dns:
   # parent_token: "${PARENT_DNS_CONTROL_TOKEN}"
   # Optional: delegate management origin lookups to an Edge Agent with an
   # authenticated HTTPS /api/v1/dns/resolve endpoint. Not for client queries.
-  # origin_agent_url: "https://edge-resolver.example.com"
-  # origin_agent_token: "${DNS_ORIGIN_AGENT_TOKEN}"
+  # Default origin resolver endpoint. Delegation activates only when the token is set.
+  origin_agent_url: "https://edge-resolver.wraplink.ir"
+  origin_agent_token: "${DNS_ORIGIN_AGENT_TOKEN}"
 
 api:
   listen: ${API_LISTEN}

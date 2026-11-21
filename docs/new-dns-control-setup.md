@@ -123,14 +123,14 @@ In the DNS Control host's untracked `.env.local`:
 DNS_ORIGIN_AGENT_TOKEN=<generate-a-unique-secret>
 ```
 
-In `config.yaml` under the existing `dns:` section, uncomment:
+The shipped `config.yaml` now contains the default URL below. Keep it unchanged if this is your designated origin-resolver host:
 
 ```yaml
-  origin_agent_url: "https://edge-resolver.example.com"
+  origin_agent_url: "https://edge-resolver.wraplink.ir"
   origin_agent_token: "${DNS_ORIGIN_AGENT_TOKEN}"
 ```
 
-Replace the URL with the actual agent HTTPS reverse proxy origin. The
+Replace the URL if the designated agent HTTPS reverse proxy uses a different hostname. With an empty `DNS_ORIGIN_AGENT_TOKEN`, delegation remains disabled and local upstreams remain in use. The
 configuration accepts an HTTPS origin with no path, query, or credentials.
 The environment variable alone does nothing unless the YAML fields are
 uncommented and the variable is passed to the DNS Control process.

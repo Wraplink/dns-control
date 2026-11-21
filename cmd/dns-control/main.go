@@ -121,7 +121,7 @@ func main() {
 	if cfg.DNS.ParentURL != "" {
 		resolver.SetParent(cfg.DNS.ParentURL, cfg.DNS.ParentToken)
 	}
-	if cfg.DNS.OriginAgentURL != "" {
+	if cfg.DNS.OriginAgentURL != "" && cfg.DNS.OriginAgentToken != "" {
 		resolver.SetOriginAgent(cfg.DNS.OriginAgentURL, cfg.DNS.OriginAgentToken)
 		log.Printf("dns: agent origin resolution enabled url=%s", cfg.DNS.OriginAgentURL)
 	}
