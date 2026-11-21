@@ -27,7 +27,12 @@ func TestClientResolutionUsesConfiguredAgent(t *testing.T) {
 			return
 		}
 		var question mdns.Msg
-		if err := question.Unpack(func() []byte { b, err := io.ReadAll(req.Body); if err != nil { t.Errorf("read DNS request: %v", err) }; return b }()); err != nil {
+		payload, err := io.ReadAll(req.Body)
+		if err != nil {
+			t.Errorf("read DNS request: %v", err)
+			return
+		}
+		if err := question.Unpack(payload); err != nil {
 			t.Errorf("unpack DNS request: %v", err)
 			http.Error(w, "invalid DNS message", http.StatusBadRequest)
 			return
