@@ -126,7 +126,7 @@ func (c Config) Validate() error {
 	}
 	if c.DNS.OriginAgentURL != "" {
 		u, err := url.Parse(c.DNS.OriginAgentURL)
-		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
 			return fmt.Errorf("dns.origin_agent_url must be an HTTP(S) origin without path, credentials or query")
 		}
 		if c.DNS.OriginAgentToken != "" && len(c.DNS.OriginAgentToken) < 32 {
