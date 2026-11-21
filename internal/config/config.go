@@ -129,7 +129,7 @@ func (c Config) Validate() error {
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" {
 			return fmt.Errorf("dns.origin_agent_url must be an HTTPS origin without path, credentials or query")
 		}
-		if len(c.DNS.OriginAgentToken) < 32 {
+		if c.DNS.OriginAgentToken != "" && len(c.DNS.OriginAgentToken) < 32 {
 			return fmt.Errorf("dns.origin_agent_token must contain at least 32 characters")
 		}
 	} else if c.DNS.OriginAgentToken != "" {
