@@ -26,11 +26,11 @@ type recordQueryResult struct {
 }
 
 type recordsResponse struct {
-	Domain     string         `json:"domain"`
-	Rcode      string         `json:"rcode"`
-	Answers    []recordAnswer `json:"answers"`
-	Authority  []recordAnswer `json:"authority"`
-	Additional []recordAnswer `json:"additional"`
+	Domain     string              `json:"domain"`
+	Rcode      string              `json:"rcode"`
+	Answers    []recordAnswer      `json:"answers"`
+	Authority  []recordAnswer      `json:"authority"`
+	Additional []recordAnswer      `json:"additional"`
 	Queries    []recordQueryResult `json:"queries"`
 }
 
