@@ -9,22 +9,22 @@ import (
 )
 
 type recordsRequest struct {
-	Domain string `json:"domain"`
-	Types []string `json:"types,omitempty"`
+	Domain string   `json:"domain"`
+	Types  []string `json:"types,omitempty"`
 }
 
 type recordAnswer struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name  string `json:"name"`
+	Type  string `json:"type"`
 	Value string `json:"value"`
-	TTL uint32 `json:"ttl"`
+	TTL   uint32 `json:"ttl"`
 }
 
 type recordsResponse struct {
-	Domain string `json:"domain"`
-	Rcode string `json:"rcode"`
-	Answers []recordAnswer `json:"answers"`
-	Authority []recordAnswer `json:"authority"`
+	Domain     string         `json:"domain"`
+	Rcode      string         `json:"rcode"`
+	Answers    []recordAnswer `json:"answers"`
+	Authority  []recordAnswer `json:"authority"`
 	Additional []recordAnswer `json:"additional"`
 }
 
