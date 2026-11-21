@@ -111,3 +111,33 @@ func TestResolveRecordsMultipleAddresses(t *testing.T) {
 		t.Fatalf("unexpected records: %+v", got.Answers)
 	}
 }
+
+func TestResolveRecordsNXDOMAIN(t *testing.T) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pc.Close()
+	server := &mdns.Server{PacketConn: pc, Handler: mdns.HandlerFunc(func(w mdns.ResponseWriter, r *mdns.Msg) {
+		m := new(mdns.Msg)
+		m.SetRcode(r, mdns.RcodeNameError)
+		_ = w.WriteMsg(m)
+	})}
+	go func() { _ = server.ActivateAndServe() }()
+	defer server.Shutdown()
+	time.Sleep(20 * time.Millisecond)
+	h := &Handler{resolver: dns.NewResolver([]string{pc.LocalAddr().String()})}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dns/resolve-records", strings.NewReader(`{"domain":"missing.example","types":["A"]}`))
+	rec := httptest.NewRecorder()
+	h.resolveRecords(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d: %s", rec.Code, rec.Body.String())
+	}
+	var got recordsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Rcode != "NXDOMAIN" || len(got.Answers) != 0 {
+		t.Fatalf("unexpected negative response: %+v", got)
+	}
+}
