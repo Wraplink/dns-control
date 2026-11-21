@@ -54,8 +54,9 @@ func (r *Resolver) SetParent(url, token string) {
 	r.parentToken = token
 }
 
-// SetOriginAgent enables authenticated agent-based origin resolution for
-// management lookups only. Ordinary client DNS queries keep their local upstreams.
+// SetOriginAgent enables authenticated agent-based DNS resolution for origin
+// management lookups and ordinary client queries that are not overridden by a
+// managed domain policy. When configured, the agent is the sole upstream.
 func (r *Resolver) SetOriginAgent(url, token string) {
 	r.originAgentURL = strings.TrimRight(strings.TrimSpace(url), "/")
 	r.originAgentToken = token
@@ -146,6 +147,12 @@ func (r *Resolver) Resolve(req *mdns.Msg) (*mdns.Msg, error) {
 }
 
 func (r *Resolver) ResolveContext(ctx context.Context, req *mdns.Msg) (*mdns.Msg, error) {
+	// The DNS handler applies managed domain policies and client entitlements
+	// before reaching this fallback resolver. Keep the agent as the single
+	// upstream when configured; never bypass it on transport failures.
+	if r.originAgentURL != "" {
+		return r.ResolveOrigin(ctx, req)
+	}
 	if req == nil {
 		return nil, fmt.Errorf("nil DNS request")
 	}
