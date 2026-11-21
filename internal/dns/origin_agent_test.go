@@ -2,6 +2,7 @@ package dns
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,9 +20,13 @@ func TestOriginAgentResolution(t *testing.T) {
 			return
 		}
 		var q mdns.Msg
-		buf := make([]byte, 4096)
-		n, err := r.Body.Read(buf)
-		if err != nil || q.Unpack(buf[:n]) != nil {
+		payload, err := io.ReadAll(io.LimitReader(r.Body, 4097))
+		if err != nil || len(payload) > 4096 {
+			http.Error(w, "bad request size", 400)
+			return
+		}
+		if err := q.Unpack(payload); err != nil {
+			t.Errorf("decode origin DNS request: %v (size=%d)", err, len(payload))
 			http.Error(w, "bad request", 400)
 			return
 		}
