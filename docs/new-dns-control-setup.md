@@ -94,34 +94,76 @@ Production deployments should implement certificate renewal and restrictive fire
 
 After upgrading Backend and Edge Agents, verify the Backend `network_agent_health` table contains fresh online agent heartbeats. Then add `WRAPLINK_BACKEND_AGENT_SNAPSHOT_ENABLED=true` to the DNS Control container environment (not only an unpassed host shell variable) and recreate DNS Control. Leave unset/false during initial deployment or rollback. Snapshot pages must share one revision; investigate synchronization errors before switching traffic. See [coordinated rollout](https://github.com/Wraplink/backend/blob/master/docs/agent-registry-rollout.md).
 
-## Optional Edge Agent origin resolver (experimental)
+## Optional Edge Agent origin resolver (experimental; do not enable until integration verified)
 
-DNS Control can delegate **management origin lookups** received at
-`POST /api/v1/dns/resolve` to an Edge Agent instead of using its local
-upstream DNS resolvers. This is **disabled by default** and does not change
-ordinary client DNS queries or managed hijack answers.
+DNS Control can delegate management origin lookups (including
+`POST /api/v1/dns/origin-ipv4` and `POST /api/v1/dns/resolve`) to a
+**statically configured** Edge Agent. Normal client DNS resolution and
+managed DNS answers remain unchanged. This option is disabled by default.
 
-In `config.yaml`, uncomment:
+### 1. Configure the agent and secure transport
+
+Deploy a compatible Edge Agent containing the optional `origin_dns`
+endpoint. The agent listens on plain HTTP at `127.0.0.1:9092` by default.
+Provide a **TLS-terminating reverse proxy** reachable from DNS Control,
+restricted to the DNS Control source IP. Do not expose port 9092 directly
+or route this endpoint through the public client DNS service. The proxy
+must preserve `Authorization` and `Content-Type`.
+
+The Edge Agent must use independent upstream DNS servers (not WrapLink DNS
+Control), with outbound TCP/53 permitted. The origin DNS bearer token must
+be a distinct random secret of at least 32 characters, shared **only**
+between DNS Control and the designated Edge Agent.
+
+### 2. Configure DNS Control
+
+In the DNS Control host's untracked `.env.local`:
+
+```dotenv
+DNS_ORIGIN_AGENT_TOKEN=<generate-a-unique-secret>
+```
+
+In `config.yaml` under the existing `dns:` section, uncomment:
 
 ```yaml
-dns:
   origin_agent_url: "https://edge-resolver.example.com"
   origin_agent_token: "${DNS_ORIGIN_AGENT_TOKEN}"
 ```
 
-The URL must be an HTTPS origin without a path. The token must be at least
-32 characters and must be provisioned to the agent's origin-resolution API.
-The agent must implement authenticated `POST /api/v1/dns/resolve`, accept
-`application/dns-message` requests, and return an unmodified DNS wire
-response with matching request ID and question. This endpoint is **not yet
-implemented in the Edge Agent repository**; do not enable this setting in
-production until the agent implementation is deployed and tested.
+Replace the URL with the actual agent HTTPS reverse proxy origin. The
+configuration accepts an HTTPS origin with no path, query, or credentials.
+The environment variable alone does nothing unless the YAML fields are
+uncommented and the variable is passed to the DNS Control process.
 
-Agent resolution is fail-closed: HTTP failures, timeouts, or an NXDOMAIN
-response do not trigger fallback to local DNS. Avoid recursive loops: the
-agent must resolve via its independent upstream resolvers, never through
-WrapLink's managed/hijacked DNS service.
+Recreate DNS Control after changing its environment or configuration:
 
-This option currently applies to the DNS Control management resolve API.
-Edge Agent lease activation still resolves locally until its integration
-is updated to request origin resolution through DNS Control.
+```bash
+docker compose -f compose.standalone.yml config --quiet
+docker compose -f compose.standalone.yml up -d --force-recreate dns-control
+docker compose -f compose.standalone.yml logs --tail=100 dns-control
+```
+
+For the central platform, edit its DNS Control configuration/mount and
+Compose environment explicitly; a standalone YAML change is **not**
+automatically applied to the platform's embedded DNS Control service.
+
+### 3. Verify and roll back
+
+Check agent endpoint HTTPS connectivity, authorization, and a known
+existing origin domain through the authenticated management API before
+enabling `edge.origin_dns_mode: dns_control` on any production Edge Agent.
+A query for `ea.akamaihd.net` currently returns NXDOMAIN from public
+resolvers; forwarding the same query to an agent does not guarantee an IP.
+
+When agent delegation is enabled, HTTP errors, timeouts, and NXDOMAIN
+do not trigger fallback to local DNS. DNS Control currently supports
+**one static origin agent URL**, not per-domain or per-lease agent
+selection. To roll back, comment out both `origin_agent_*` YAML fields
+and recreate DNS Control; restore `edge.origin_dns_mode: local` on agents.
+
+Related documentation:
+[Edge Agent setup](https://github.com/Wraplink/edge-agent/blob/main/docs/new-agent-setup.md)
+and [platform environment reference](https://github.com/Wraplink/platform/blob/main/docs/environment-variables.md).
+
+**Release gate:** merge and deploy compatible DNS Control and Edge Agent
+versions only after both CI suites and authenticated end-to-end tests pass.
