@@ -10,10 +10,10 @@ import (
 func TestResolveRecordsValidation(t *testing.T) {
 	h := &Handler{}
 	tests := []struct {
-		name string
+		name   string
 		method string
-		body string
-		want int
+		body   string
+		want   int
 	}{
 		{"wrong method", http.MethodGet, "", http.StatusMethodNotAllowed},
 		{"no resolver", http.MethodPost, `{"domain":"example.com"}`, http.StatusServiceUnavailable},
