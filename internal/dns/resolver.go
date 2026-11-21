@@ -28,13 +28,13 @@ func parentHopCount(ctx context.Context) int {
 }
 
 type Resolver struct {
-	client      *mdns.Client
-	upstreams   []string
-	parentURL   string
-	parentToken string
-	originAgentURL string
+	client           *mdns.Client
+	upstreams        []string
+	parentURL        string
+	parentToken      string
+	originAgentURL   string
 	originAgentToken string
-	httpClient  *http.Client
+	httpClient       *http.Client
 }
 
 func NewResolver(upstreams []string) *Resolver {
@@ -72,21 +72,31 @@ func (r *Resolver) ResolveOrigin(ctx context.Context, req *mdns.Msg) (*mdns.Msg,
 		return nil, fmt.Errorf("origin DNS request must have one question")
 	}
 	wire, err := req.Pack()
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, r.originAgentURL+"/api/v1/dns/resolve", bytes.NewReader(wire))
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	request.Header.Set("Content-Type", "application/dns-message")
 	request.Header.Set("Authorization", "Bearer "+r.originAgentToken)
 	response, err := r.httpClient.Do(request)
-	if err != nil { return nil, fmt.Errorf("agent origin DNS request: %w", err) }
+	if err != nil {
+		return nil, fmt.Errorf("agent origin DNS request: %w", err)
+	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("agent origin DNS returned HTTP %d", response.StatusCode)
 	}
 	payload, err := io.ReadAll(io.LimitReader(response.Body, 65537))
-	if err != nil || len(payload) > 65536 { return nil, fmt.Errorf("invalid agent DNS response size") }
+	if err != nil || len(payload) > 65536 {
+		return nil, fmt.Errorf("invalid agent DNS response size")
+	}
 	var result mdns.Msg
-	if err := result.Unpack(payload); err != nil { return nil, err }
+	if err := result.Unpack(payload); err != nil {
+		return nil, err
+	}
 	if !result.Response || result.Id != req.Id || len(result.Question) != 1 || result.Question[0] != req.Question[0] {
 		return nil, fmt.Errorf("agent origin DNS response does not match question")
 	}
