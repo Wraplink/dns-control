@@ -158,3 +158,43 @@ func TestResolveRecordsOriginFailure(t *testing.T) {
 		t.Fatalf("status=%d, want 502: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestResolveRecordsMixedResponseCodes(t *testing.T) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pc.Close()
+	server := &mdns.Server{PacketConn: pc, Handler: mdns.HandlerFunc(func(w mdns.ResponseWriter, r *mdns.Msg) {
+		m := new(mdns.Msg)
+		m.SetReply(r)
+		if r.Question[0].Qtype == mdns.TypeAAAA {
+			m.Rcode = mdns.RcodeServerFailure
+		} else {
+			rr, _ := mdns.NewRR("example.com. 60 IN A 192.0.2.10")
+			m.Answer = []mdns.RR{rr}
+		}
+		_ = w.WriteMsg(m)
+	})}
+	go func() { _ = server.ActivateAndServe() }()
+	defer server.Shutdown()
+	time.Sleep(20 * time.Millisecond)
+
+	h := &Handler{resolver: dns.NewResolver([]string{pc.LocalAddr().String()})}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/dns/resolve-records", strings.NewReader(`{"domain":"example.com","types":["A","AAAA"]}`))
+	rec := httptest.NewRecorder()
+	h.resolveRecords(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d: %s", rec.Code, rec.Body.String())
+	}
+	var got recordsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Queries) != 2 || got.Queries[0].Rcode != "NOERROR" || got.Queries[1].Rcode != "SERVFAIL" {
+		t.Fatalf("unexpected per-type DNS statuses: %+v", got.Queries)
+	}
+	if got.Rcode != "SERVFAIL" || len(got.Answers) != 1 {
+		t.Fatalf("unexpected combined response: %+v", got)
+	}
+}
