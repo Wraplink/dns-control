@@ -21,6 +21,9 @@ type DataplaneVerifier interface {
 // cause verification of an older operation to complete a newer revision.
 // Node identity MUST come from trusted authentication middleware, never JSON.
 func (t *Tracker) RecordVerified(ctx context.Context, authenticatedNodeID string, report NodeReport, verifier DataplaneVerifier) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if verifier == nil || authenticatedNodeID == "" || authenticatedNodeID != report.NodeID || !report.Applied {
 		return ErrDataplaneUnverified
 	}
@@ -41,6 +44,9 @@ func (t *Tracker) RecordVerified(ctx context.Context, authenticatedNodeID string
 	}
 	if !applied {
 		return ErrDataplaneUnverified
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	return t.record(authenticatedNodeID, report)
 }
