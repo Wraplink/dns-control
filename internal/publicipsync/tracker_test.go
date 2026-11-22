@@ -16,13 +16,13 @@ func TestTrackerRequiresAllNodes(t *testing.T) {
 	if done, err := tracker.Complete(op.SubscriptionID); err != nil || done {
 		t.Fatalf("completed without reports: %v %v", done, err)
 	}
-	if err := tracker.Record(nodes[0], reports[0]); err != nil {
+	if err := tracker.record(nodes[0], reports[0]); err != nil {
 		t.Fatal(err)
 	}
 	if done, err := tracker.Complete(op.SubscriptionID); err != nil || done {
 		t.Fatalf("completed with one report: %v %v", done, err)
 	}
-	if err := tracker.Record(nodes[1], reports[1]); err != nil {
+	if err := tracker.record(nodes[1], reports[1]); err != nil {
 		t.Fatal(err)
 	}
 	if done, err := tracker.Complete(op.SubscriptionID); err != nil || !done {
@@ -36,15 +36,15 @@ func TestTrackerRejectsSpoofedAndStaleReports(t *testing.T) {
 	if err := tracker.Begin(op, nodes); err != nil {
 		t.Fatal(err)
 	}
-	if err := tracker.Record("different-node", reports[0]); !errors.Is(err, ErrNoPendingOperation) {
+	if err := tracker.record("different-node", reports[0]); !errors.Is(err, ErrNoPendingOperation) {
 		t.Fatalf("accepted spoofed identity: %v", err)
 	}
 	stale := reports[0]
 	stale.Revision--
-	if err := tracker.Record(nodes[0], stale); !errors.Is(err, ErrNoPendingOperation) {
+	if err := tracker.record(nodes[0], stale); !errors.Is(err, ErrNoPendingOperation) {
 		t.Fatalf("accepted stale revision: %v", err)
 	}
-	if err := tracker.Record(nodes[0], reports[0]); err != nil {
+	if err := tracker.record(nodes[0], reports[0]); err != nil {
 		t.Fatal(err)
 	}
 	newOp := op
@@ -53,7 +53,7 @@ func TestTrackerRejectsSpoofedAndStaleReports(t *testing.T) {
 	if err := tracker.Begin(newOp, nodes); err != nil {
 		t.Fatal(err)
 	}
-	if err := tracker.Record(nodes[0], reports[0]); !errors.Is(err, ErrNoPendingOperation) {
+	if err := tracker.record(nodes[0], reports[0]); !errors.Is(err, ErrNoPendingOperation) {
 		t.Fatalf("accepted prior attempt: %v", err)
 	}
 	if done, err := tracker.Complete(op.SubscriptionID); err != nil || done {
