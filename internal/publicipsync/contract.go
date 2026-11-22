@@ -3,6 +3,7 @@ package publicipsync
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"strings"
 
 	"github.com/google/uuid"
@@ -31,7 +32,11 @@ var ErrIncomplete = errors.New("public IP network acknowledgement incomplete")
 var ErrInvalidOperation = errors.New("invalid public IP operation")
 
 func (o Operation) Validate() error {
-	if o.SubscriptionID == uuid.Nil || o.PublicIPID == uuid.Nil || o.AttemptID == uuid.Nil || o.Revision < 1 || strings.TrimSpace(o.IPAddress) == "" {
+	if o.SubscriptionID == uuid.Nil || o.PublicIPID == uuid.Nil || o.AttemptID == uuid.Nil || o.Revision < 1 {
+		return ErrInvalidOperation
+	}
+	ip, err := netip.ParseAddr(o.IPAddress)
+	if err != nil || !ip.Is4() || !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.Is4In6() {
 		return ErrInvalidOperation
 	}
 	return nil
