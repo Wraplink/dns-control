@@ -55,9 +55,10 @@ func (t *Tracker) Begin(op Operation, required []string) error {
 	return nil
 }
 
-// Record accepts reports only after the caller authenticates the node identity
-// and verifies the installed dataplane state. Never trust NodeID from JSON.
-func (t *Tracker) Record(authenticatedNodeID string, report NodeReport) error {
+// record is deliberately private: callers must use RecordVerified so an
+// unverified report cannot bypass dataplane inspection. The caller of
+// RecordVerified must supply an identity from trusted authentication.
+func (t *Tracker) record(authenticatedNodeID string, report NodeReport) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	p := t.pending[report.SubscriptionID]
