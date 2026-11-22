@@ -52,3 +52,15 @@ func TestInvalidOperation(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestRejectNonPublicIPv4(t *testing.T) {
+	for _, ip := range []string{"", "127.0.0.1", "10.0.0.1", "192.168.1.1", "169.254.1.2", "0.0.0.0", "::1", "2001:4860:4860::8888", "::ffff:8.8.8.8", "not-an-ip"} {
+		t.Run(ip, func(t *testing.T) {
+			op, _, _ := fixture()
+			op.IPAddress = ip
+			if !errors.Is(op.Validate(), ErrInvalidOperation) {
+				t.Fatalf("accepted invalid IP %q", ip)
+			}
+		})
+	}
+}
