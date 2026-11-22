@@ -66,3 +66,22 @@ func TestRecordVerifiedConcurrentRevisionChange(t *testing.T) {
 		t.Fatalf("completed newer revision with stale report: %v %v", done, err)
 	}
 }
+
+func TestRecordVerifiedRejectsCancellationDuringVerification(t *testing.T) {
+	op, nodes, reports := fixture()
+	tracker := NewTracker()
+	if err := tracker.Begin(op, nodes); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	verifier := verifyFunc(func(context.Context, string, Operation) (bool, error) {
+		cancel()
+		return true, nil
+	})
+	if err := tracker.RecordVerified(ctx, nodes[0], reports[0], verifier); !errors.Is(err, context.Canceled) {
+		t.Fatalf("accepted canceled verification: %v", err)
+	}
+	if done, err := tracker.Complete(op.SubscriptionID); err != nil || done {
+		t.Fatalf("completed canceled verification: %v %v", done, err)
+	}
+}
