@@ -42,7 +42,7 @@ func (t *Tracker) RecordVerified(ctx context.Context, authenticatedNodeID string
 	if !applied {
 		return ErrDataplaneUnverified
 	}
-	return t.Record(authenticatedNodeID, report)
+	return t.record(authenticatedNodeID, report)
 }
 
 // PendingRevision returns a snapshot for orchestration without exposing mutable
