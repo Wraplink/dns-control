@@ -146,3 +146,33 @@ func TestFileStoreConcurrentRevisionFencesStaleReport(t *testing.T) {
 		t.Fatalf("new revision retained stale acknowledgement: %+v", snapshot)
 	}
 }
+
+func TestFileStoreBeginRetryPreservesVerifiedReports(t *testing.T) {
+	ctx := context.Background()
+	op, nodes, reports := fixture()
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Begin(ctx, op, nodes); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveVerified(ctx, nodes[0], reports[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Begin(ctx, op, nodes); err != nil {
+		t.Fatalf("identical retry rejected: %v", err)
+	}
+	snapshot, err := store.Snapshot(ctx, op.SubscriptionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.VerifiedReports) != 1 || snapshot.VerifiedReports[0] != reports[0] {
+		t.Fatalf("retry erased acknowledged node: %+v", snapshot.VerifiedReports)
+	}
+	replaced := op
+	replaced.AttemptID = uuid.New()
+	if err := store.Begin(ctx, replaced, nodes); !errors.Is(err, ErrInvalidOperation) {
+		t.Fatalf("same revision with changed attempt accepted: %v", err)
+	}
+}
