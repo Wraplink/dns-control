@@ -67,7 +67,25 @@ func (s *FileStore) read(id uuid.UUID) (DurableSnapshot, error) {
 		return snapshot, err
 	}
 	if snapshot.Operation.SubscriptionID != id {
-		return snapshot, ErrInvalidOperation
+		return DurableSnapshot{}, ErrInvalidOperation
+	}
+	if err := snapshot.Operation.Validate(); err != nil {
+		return DurableSnapshot{}, err
+	}
+	if len(snapshot.RequiredNodes) == 0 {
+		return DurableSnapshot{}, ErrInvalidOperation
+	}
+	seen := make(map[string]bool, len(snapshot.RequiredNodes))
+	for _, node := range snapshot.RequiredNodes {
+		if node == "" || seen[node] {
+			return DurableSnapshot{}, ErrInvalidOperation
+		}
+		seen[node] = true
+	}
+	for _, report := range snapshot.VerifiedReports {
+		if !seen[report.NodeID] || !report.Applied || report.SubscriptionID != id || report.PublicIPID != snapshot.Operation.PublicIPID || report.Revision != snapshot.Operation.Revision || report.AttemptID != snapshot.Operation.AttemptID {
+			return DurableSnapshot{}, ErrInvalidOperation
+		}
 	}
 	return snapshot, nil
 }
