@@ -37,6 +37,8 @@ func TestReportHandlerFailClosed(t *testing.T) {
 		{"missing credentials", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, "", body, http.StatusUnauthorized},
 		{"invalid JSON", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, []byte("{"), http.StatusBadRequest},
 		{"unknown field", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, append(body[:len(body)-1:len(body)-1], []byte(",\"unknown\":1}")...), http.StatusBadRequest},
+		{"oversized", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, []byte(strings.Repeat("x", 4097)), http.StatusBadRequest},
+		{"trailing JSON", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, append(append([]byte{}, body...), []byte(" {}")...), http.StatusBadRequest},
 		{"valid", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, body, http.StatusAccepted},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
