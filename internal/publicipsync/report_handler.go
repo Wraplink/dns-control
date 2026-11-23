@@ -51,7 +51,11 @@ func (h ReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := SaveDataplaneVerified(r.Context(), h.Store, node, report, h.Verifier); err != nil {
-		http.Error(w, "acknowledgement rejected", http.StatusConflict)
+		if errors.Is(err, ErrNoPendingOperation) || errors.Is(err, ErrDataplaneUnverified) || errors.Is(err, ErrIncomplete) {
+			http.Error(w, "acknowledgement rejected", http.StatusConflict)
+			return
+		}
+		http.Error(w, "acknowledgement storage or verification unavailable", http.StatusServiceUnavailable)
 		return
 	}
 	w.WriteHeader(http.StatusAccepted)
