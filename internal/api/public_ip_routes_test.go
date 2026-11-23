@@ -27,9 +27,9 @@ func TestPublicIPReportRouteIsOptIn(t *testing.T) {
 		t.Fatal(err)
 	}
 	enabled := WithPublicIPReportEndpoint(legacy, publicipsync.ReportHandler{
-		Store: fakePublicIPStore{},
+		Store:         fakePublicIPStore{},
 		Authenticator: auth,
-		Verifier: fakePublicIPVerifier{},
+		Verifier:      fakePublicIPVerifier{},
 	})
 	w := httptest.NewRecorder()
 	enabled.ServeHTTP(w, httptest.NewRequest(http.MethodPost, publicIPReportPath, nil))
