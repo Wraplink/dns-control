@@ -49,3 +49,30 @@ type fakePublicIPVerifier struct{}
 func (fakePublicIPVerifier) VerifyApplied(_ context.Context, _ string, _ publicipsync.Operation) (bool, error) {
 	return false, nil
 }
+
+func TestPublicIPReportRouteRequiresEveryDependency(t *testing.T) {
+	legacy := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	})
+	auth, err := publicipsync.NewNodeAuthenticator(map[string]string{"edge-eu-01": strings.Repeat("x", 48)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		handler publicipsync.ReportHandler
+	}{
+		{name: "missing store", handler: publicipsync.ReportHandler{Authenticator: auth, Verifier: fakePublicIPVerifier{}}},
+		{name: "missing authenticator", handler: publicipsync.ReportHandler{Store: fakePublicIPStore{}, Verifier: fakePublicIPVerifier{}}},
+		{name: "missing verifier", handler: publicipsync.ReportHandler{Store: fakePublicIPStore{}, Authenticator: auth}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wrapped := WithPublicIPReportEndpoint(legacy, tc.handler)
+			w := httptest.NewRecorder()
+			wrapped.ServeHTTP(w, httptest.NewRequest(http.MethodPost, publicIPReportPath, nil))
+			if w.Code != http.StatusTeapot {
+				t.Fatalf("incomplete security dependencies mounted route: %d", w.Code)
+			}
+		})
+	}
+}
