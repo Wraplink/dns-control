@@ -11,6 +11,7 @@ import (
 // explicitly wires a trusted node authenticator and independent verifier.
 // This handler is not registered in the production DNS Control router yet.
 type ReportHandler struct {
+	Store         DurableStore
 	Tracker       *Tracker
 	Authenticator *NodeAuthenticator
 	Verifier      DataplaneVerifier
@@ -24,7 +25,7 @@ func (h ReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if h.Tracker == nil || h.Authenticator == nil || h.Verifier == nil {
+	if h.Store == nil || h.Authenticator == nil || h.Verifier == nil {
 		http.Error(w, "acknowledgement service unavailable", http.StatusServiceUnavailable)
 		return
 	}
@@ -49,9 +50,10 @@ func (h ReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid trailing JSON", http.StatusBadRequest)
 		return
 	}
-	// Do not mutate the in-memory tracker: verification without a durable
-	// transactional commit cannot be acknowledged or safely recovered.
-	_ = node
-	_ = report
-	http.Error(w, "durable acknowledgement storage unavailable", http.StatusServiceUnavailable)
+	if err := SaveDataplaneVerified(r.Context(), h.Store, node, report, h.Verifier); err != nil {
+		http.Error(w, "acknowledgement rejected", http.StatusConflict)
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+	_, _ = w.Write([]byte("{\"accepted\":true}\n"))
 }
