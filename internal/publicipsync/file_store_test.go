@@ -273,3 +273,33 @@ func TestFileStoreRejectsSymlinkedLockFile(t *testing.T) {
 		t.Fatalf("lock target modified: %q", got)
 	}
 }
+
+func TestFileStoreRejectsSymlinkedSnapshotWithoutReadingTarget(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	store, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	op, nodes, _ := fixture()
+	outside := filepath.Join(t.TempDir(), "external.json")
+	if err := os.WriteFile(outside, []byte("private data"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, store.filename(op.SubscriptionID)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Snapshot(ctx, op.SubscriptionID); err == nil {
+		t.Fatal("symlinked snapshot accepted")
+	}
+	if err := store.Begin(ctx, op, nodes); err == nil {
+		t.Fatal("symlinked snapshot overwritten by Begin")
+	}
+	data, err := os.ReadFile(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "private data" {
+		t.Fatal("external target modified")
+	}
+}
