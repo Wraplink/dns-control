@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"github.com/google/uuid"
 	"testing"
 )
 
@@ -103,5 +104,45 @@ func TestFileStoreConcurrentInstancesPreserveReports(t *testing.T) {
 	}
 	if complete, err := snapshot.Complete(); err != nil || !complete {
 		t.Fatalf("concurrent reports lost: complete=%v err=%v", complete, err)
+	}
+}
+
+func TestFileStoreConcurrentRevisionFencesStaleReport(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	op, nodes, reports := fixture()
+	first, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Begin(ctx, op, nodes[:1]); err != nil {
+		t.Fatal(err)
+	}
+	next := op
+	next.Revision++
+	next.AttemptID = uuid.New()
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_ = first.SaveVerified(ctx, nodes[0], reports[0])
+	}()
+	go func() {
+		defer wg.Done()
+		if err := second.Begin(ctx, next, nodes[:1]); err != nil {
+			t.Errorf("begin next revision: %v", err)
+		}
+	}()
+	wg.Wait()
+	snapshot, err := first.Snapshot(ctx, op.SubscriptionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Operation.Revision != next.Revision || len(snapshot.VerifiedReports) != 0 {
+		t.Fatalf("new revision retained stale acknowledgement: %+v", snapshot)
 	}
 }
