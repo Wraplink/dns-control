@@ -27,8 +27,8 @@ type DurableStore interface {
 // DurableSnapshot is the committed state needed to reconstruct completion
 // after a process restart. Never infer completion from report count alone.
 type DurableSnapshot struct {
-	Operation Operation
-	RequiredNodes []string
+	Operation       Operation
+	RequiredNodes   []string
 	VerifiedReports []NodeReport
 }
 
