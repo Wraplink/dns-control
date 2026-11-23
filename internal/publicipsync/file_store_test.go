@@ -3,6 +3,7 @@ package publicipsync
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 )
 
@@ -58,5 +59,49 @@ func TestFileStoreRestartAndRevisionFence(t *testing.T) {
 	}
 	if complete, err := snapshot.Complete(); err != nil || complete {
 		t.Fatalf("new revision retained old completion: complete=%v err=%v", complete, err)
+	}
+}
+
+func TestFileStoreConcurrentInstancesPreserveReports(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	op, nodes, reports := fixture()
+	first, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Begin(ctx, op, nodes); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	for i, store := range []*FileStore{first, second} {
+		wg.Add(1)
+		go func(i int, store *FileStore) {
+			defer wg.Done()
+			errs <- store.SaveVerified(ctx, nodes[i], reports[i])
+		}(i, store)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	restarted, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := restarted.Snapshot(ctx, op.SubscriptionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if complete, err := snapshot.Complete(); err != nil || !complete {
+		t.Fatalf("concurrent reports lost: complete=%v err=%v", complete, err)
 	}
 }
