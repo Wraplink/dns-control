@@ -49,4 +49,9 @@ func (h ReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid trailing JSON", http.StatusBadRequest)
 		return
 	}
-	// Do not mutate the in-memory tracker: verification without a durable\n	// transactional commit cannot be acknowledged or safely recovered.\n	_ = node\n	_ = report\n	http.Error(w, "durable acknowledgement storage unavailable", http.StatusServiceUnavailable)\n}\n
+	// Do not mutate the in-memory tracker: verification without a durable
+	// transactional commit cannot be acknowledged or safely recovered.
+	_ = node
+	_ = report
+	http.Error(w, "durable acknowledgement storage unavailable", http.StatusServiceUnavailable)
+}
