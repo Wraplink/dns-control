@@ -49,9 +49,4 @@ func (h ReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid trailing JSON", http.StatusBadRequest)
 		return
 	}
-	// A verified in-memory report is not durable. Until transactional storage\n\t// and restart reconciliation are wired, this endpoint must fail closed.\n\t// Do not return HTTP 202 or imply successful activation.\n\tif err := h.Tracker.ReportFromAuthenticatedNode(r.Context(), node, report, h.Verifier); err != nil {
-		http.Error(w, "acknowledgement rejected", http.StatusConflict)
-		return
-	}
-	http.Error(w, "durable acknowledgement storage unavailable", http.StatusServiceUnavailable)
-}
+	// Do not mutate the in-memory tracker: verification without a durable\n	// transactional commit cannot be acknowledged or safely recovered.\n	_ = node\n	_ = report\n	http.Error(w, "durable acknowledgement storage unavailable", http.StatusServiceUnavailable)\n}\n
