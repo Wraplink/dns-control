@@ -2,6 +2,9 @@ package publicipsync
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"errors"
 	"sync"
 	"testing"
@@ -175,5 +178,33 @@ func TestFileStoreBeginRetryPreservesVerifiedReports(t *testing.T) {
 	replaced.AttemptID = uuid.New()
 	if err := store.Begin(ctx, replaced, nodes); !errors.Is(err, ErrInvalidOperation) {
 		t.Fatalf("same revision with changed attempt accepted: %v", err)
+	}
+}
+
+func TestFileStoreRejectsDuplicatePersistedReports(t *testing.T) {
+	ctx := context.Background()
+	op, nodes, reports := fixture()
+	dir := t.TempDir()
+	store, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Begin(ctx, op, nodes); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := DurableSnapshot{
+		Operation: op,
+		RequiredNodes: nodes,
+		VerifiedReports: []NodeReport{reports[0], reports[0]},
+	}
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, op.SubscriptionID.String()+".json"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Snapshot(ctx, op.SubscriptionID); !errors.Is(err, ErrInvalidOperation) {
+		t.Fatalf("duplicate persisted report accepted: %v", err)
 	}
 }
