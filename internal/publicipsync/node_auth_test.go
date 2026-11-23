@@ -16,9 +16,9 @@ func TestNodeAuthenticator(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
-		name string
+		name    string
 		headers []string
-		want string
+		want    string
 	}{
 		{"first", []string{"Bearer " + tokenA}, "edge-eu-01"},
 		{"second", []string{"Bearer " + tokenB}, "edge-eu-02"},
