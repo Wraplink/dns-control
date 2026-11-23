@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"syscall"
 
@@ -155,6 +156,9 @@ func (s *FileStore) Begin(ctx context.Context, op Operation, requiredNodes []str
 	defer unlock(lock)
 	old, err := s.read(op.SubscriptionID)
 	if err == nil && op.Revision <= old.Operation.Revision {
+		if op == old.Operation && slices.Equal(requiredNodes, old.RequiredNodes) {
+			return nil
+		}
 		return ErrInvalidOperation
 	}
 	if err != nil && !errors.Is(err, ErrNoPendingOperation) {
