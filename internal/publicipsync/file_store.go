@@ -29,14 +29,23 @@ func NewFileStore(dir string) (*FileStore, error) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(dir, 0700); err != nil {
-		return nil, err
-	}
+	// Inspect the path before chmod: chmod follows symlinks and must not
+	// modify permissions on an unrelated target directory.
 	info, err := os.Lstat(dir)
 	if err != nil {
 		return nil, err
 	}
-	if !info.IsDir() || info.Mode().Perm()&0022 != 0 {
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return nil, ErrDurableStoreUnavailable
+	}
+	if err := os.Chmod(dir, 0700); err != nil {
+		return nil, err
+	}
+	info, err = os.Lstat(dir)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0022 != 0 {
 		return nil, ErrDurableStoreUnavailable
 	}
 	return &FileStore{dir: dir}, nil
