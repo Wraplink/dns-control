@@ -3,6 +3,7 @@ package publicipsync
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 )
 
@@ -44,7 +45,7 @@ func (h ReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := decoder.Decode(&extra); err == nil {
 		http.Error(w, "multiple JSON values", http.StatusBadRequest)
 		return
-	} else if !errors.Is(err, javaEOF) {
+	} else if !errors.Is(err, io.EOF) {
 		http.Error(w, "invalid trailing JSON", http.StatusBadRequest)
 		return
 	}
