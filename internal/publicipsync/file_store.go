@@ -77,14 +77,23 @@ func (s *FileStore) filename(id uuid.UUID) string {
 
 func (s *FileStore) read(id uuid.UUID) (DurableSnapshot, error) {
 	var snapshot DurableSnapshot
-	data, err := os.ReadFile(s.filename(id))
+	fd, err := syscall.Open(s.filename(id), syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return snapshot, ErrNoPendingOperation
 		}
 		return snapshot, err
 	}
-	if err := json.Unmarshal(data, &snapshot); err != nil {
+	file := os.NewFile(uintptr(fd), s.filename(id))
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return snapshot, err
+	}
+	if !info.Mode().IsRegular() {
+		return snapshot, ErrInvalidOperation
+	}
+	if err := json.NewDecoder(file).Decode(&snapshot); err != nil {
 		return snapshot, err
 	}
 	if snapshot.Operation.SubscriptionID != id {
