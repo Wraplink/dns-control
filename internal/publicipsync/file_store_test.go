@@ -3,9 +3,9 @@ package publicipsync
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
-	"errors"
 	"sync"
 	"testing"
 
@@ -193,8 +193,8 @@ func TestFileStoreRejectsDuplicatePersistedReports(t *testing.T) {
 		t.Fatal(err)
 	}
 	snapshot := DurableSnapshot{
-		Operation: op,
-		RequiredNodes: nodes,
+		Operation:       op,
+		RequiredNodes:   nodes,
 		VerifiedReports: []NodeReport{reports[0], reports[0]},
 	}
 	data, err := json.Marshal(snapshot)
