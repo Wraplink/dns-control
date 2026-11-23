@@ -225,3 +225,25 @@ func TestFileStoreRejectsWritableDirectoryPermissions(t *testing.T) {
 		t.Fatalf("store directory permissions = %o, want 0700", info.Mode().Perm())
 	}
 }
+
+func TestFileStoreRejectsSymlinkWithoutChangingTargetPermissions(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	if err := os.Mkdir(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "store-link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewFileStore(link); !errors.Is(err, ErrDurableStoreUnavailable) {
+		t.Fatalf("symlinked durable store accepted: %v", err)
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0755 {
+		t.Fatalf("symlink target permissions changed to %o", info.Mode().Perm())
+	}
+}
