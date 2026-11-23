@@ -194,3 +194,59 @@ func TestPublicIPReportRouteRejectsUnverifiedDataplane(t *testing.T) {
 		t.Fatalf("unverified dataplane completed operation: complete=%v err=%v", complete, err)
 	}
 }
+
+func TestPublicIPReportRouteRejectsImpersonatedNode(t *testing.T) {
+	ctx := context.Background()
+	store, err := publicipsync.NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	op := publicipsync.Operation{
+		SubscriptionID: uuid.New(),
+		PublicIPID:     uuid.New(),
+		IPAddress:      "8.8.8.8",
+		Revision:       1,
+		AttemptID:      uuid.New(),
+	}
+	if err := store.Begin(ctx, op, []string{"edge-eu-01"}); err != nil {
+		t.Fatal(err)
+	}
+	auth, err := publicipsync.NewNodeAuthenticator(map[string]string{
+		"edge-eu-01": strings.Repeat("x", 48),
+		"edge-eu-02": strings.Repeat("y", 48),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapped := WithPublicIPReportEndpoint(http.NotFoundHandler(), publicipsync.ReportHandler{
+		Store:         store,
+		Authenticator: auth,
+		Verifier:      acceptingPublicIPVerifier{},
+	})
+	report := publicipsync.NodeReport{
+		NodeID:         "edge-eu-01",
+		SubscriptionID: op.SubscriptionID,
+		PublicIPID:     op.PublicIPID,
+		Revision:       op.Revision,
+		AttemptID:      op.AttemptID,
+		Applied:        true,
+	}
+	body, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, publicIPReportPath, bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+strings.Repeat("y", 48))
+	w := httptest.NewRecorder()
+	wrapped.ServeHTTP(w, req)
+	if w.Code == http.StatusAccepted {
+		t.Fatal("another node's credential impersonated the required node")
+	}
+	snapshot, err := store.Snapshot(ctx, op.SubscriptionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if complete, err := snapshot.Complete(); err != nil || complete {
+		t.Fatalf("impersonated report completed operation: complete=%v err=%v", complete, err)
+	}
+}
