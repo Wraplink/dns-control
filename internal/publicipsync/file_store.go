@@ -54,10 +54,11 @@ func NewFileStore(dir string) (*FileStore, error) {
 // lock acquires a process-shared advisory lock before reading or writing.
 // The lock file must never be deleted while the store is in use.
 func (s *FileStore) lock() (*os.File, error) {
-	file, err := os.OpenFile(filepath.Join(s.dir, ".store.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	fd, err := syscall.Open(filepath.Join(s.dir, ".store.lock"), syscall.O_CREAT|syscall.O_RDWR|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0600)
 	if err != nil {
 		return nil, err
 	}
+	file := os.NewFile(uintptr(fd), ".store.lock")
 	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
 		file.Close()
 		return nil, err
