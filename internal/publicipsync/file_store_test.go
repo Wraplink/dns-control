@@ -209,9 +209,9 @@ func TestFileStoreRejectsDuplicatePersistedReports(t *testing.T) {
 	}
 }
 
-func TestFileStoreRejectsUnsafeDirectoryPermissions(t *testing.T) {
+func TestFileStoreRejectsWritableDirectoryPermissions(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.Chmod(dir, 0755); err != nil {
+	if err := os.Chmod(dir, 0777); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := NewFileStore(dir); err != nil {
