@@ -24,7 +24,7 @@ func TestDurableSnapshotCompletion(t *testing.T) {
 	}
 	snapshot.VerifiedReports = reports
 	snapshot.Operation.AttemptID = uuid.New()
-	if complete, err := snapshot.Complete(); err == nil || complete {
+	if complete, err := snapshot.Complete(); err != nil || complete {
 		t.Fatalf("wrong attempt completed: complete=%v err=%v", complete, err)
 	}
 }
