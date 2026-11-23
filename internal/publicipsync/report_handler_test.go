@@ -39,7 +39,7 @@ func TestReportHandlerFailClosed(t *testing.T) {
 		{"unknown field", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, append(body[:len(body)-1:len(body)-1], []byte(",\"unknown\":1}")...), http.StatusBadRequest},
 		{"oversized", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, []byte(strings.Repeat("x", 4097)), http.StatusBadRequest},
 		{"trailing JSON", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, append(append([]byte{}, body...), []byte(" {}")...), http.StatusBadRequest},
-		{"valid", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, body, http.StatusAccepted},
+		{"valid but not durable", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, body, http.StatusServiceUnavailable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(tc.body))
@@ -52,5 +52,8 @@ func TestReportHandlerFailClosed(t *testing.T) {
 				t.Fatalf("status = %d, want %d: %s", w.Code, tc.want, w.Body.String())
 			}
 		})
+	}
+	if complete, err := tracker.Complete(op.SubscriptionID); err != nil || complete {
+		t.Fatalf("non-durable HTTP report changed completion: complete=%v err=%v", complete, err)
 	}
 }
