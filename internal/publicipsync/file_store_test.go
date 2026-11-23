@@ -208,3 +208,19 @@ func TestFileStoreRejectsDuplicatePersistedReports(t *testing.T) {
 		t.Fatalf("duplicate persisted report accepted: %v", err)
 	}
 }
+
+func TestFileStoreRejectsUnsafeDirectoryPermissions(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewFileStore(dir); !errors.Is(err, ErrDurableStoreUnavailable) {
+		t.Fatalf("world-readable store directory accepted: %v", err)
+	}
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewFileStore(dir); err != nil {
+		t.Fatalf("private store directory rejected: %v", err)
+	}
+}
