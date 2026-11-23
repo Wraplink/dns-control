@@ -247,3 +247,29 @@ func TestFileStoreRejectsSymlinkWithoutChangingTargetPermissions(t *testing.T) {
 		t.Fatalf("symlink target permissions changed to %o", info.Mode().Perm())
 	}
 }
+
+func TestFileStoreRejectsSymlinkedLockFile(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(t.TempDir(), "outside-lock")
+	if err := os.WriteFile(target, []byte("unchanged"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, ".store.lock")); err != nil {
+		t.Fatal(err)
+	}
+	store, err := NewFileStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	op, nodes, _ := fixture()
+	if err := store.Begin(context.Background(), op, nodes); err == nil {
+		t.Fatal("symlinked lock file was accepted")
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "unchanged" {
+		t.Fatalf("lock target modified: %q", got)
+	}
+}
