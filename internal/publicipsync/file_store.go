@@ -15,7 +15,7 @@ import (
 // FileStore process may own a directory; cross-process locking is not provided.
 // Callers must mount dir on persistent storage, not an ephemeral container layer.
 type FileStore struct {
-	mu sync.Mutex
+	mu  sync.Mutex
 	dir string
 }
 
