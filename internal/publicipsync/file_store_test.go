@@ -3,9 +3,10 @@ package publicipsync
 import (
 	"context"
 	"errors"
-	"github.com/google/uuid"
 	"sync"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestFileStoreRestartAndRevisionFence(t *testing.T) {
@@ -43,8 +44,8 @@ func TestFileStoreRestartAndRevisionFence(t *testing.T) {
 	if complete, err := snapshot.Complete(); err != nil || !complete {
 		t.Fatalf("full restart snapshot: complete=%v err=%v", complete, err)
 	}
-	if err := restarted.Begin(ctx, op, nodes); !errors.Is(err, ErrInvalidOperation) {
-		t.Fatalf("accepted repeated revision: %v", err)
+	if err := restarted.Begin(ctx, op, nodes); err != nil {
+		t.Fatalf("identical revision retry rejected: %v", err)
 	}
 	next := op
 	next.Revision++
