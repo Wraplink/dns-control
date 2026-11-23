@@ -3,8 +3,8 @@ package publicipsync
 import (
 	"context"
 	"errors"
-	"sync"
 	"github.com/google/uuid"
+	"sync"
 	"testing"
 )
 
