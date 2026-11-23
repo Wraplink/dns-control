@@ -19,7 +19,7 @@ func TestDurableSnapshotCompletion(t *testing.T) {
 	stale := append([]NodeReport(nil), reports...)
 	stale[0].Revision--
 	snapshot.VerifiedReports = stale
-	if complete, err := snapshot.Complete(); err == nil || complete {
+	if complete, err := snapshot.Complete(); err != nil || complete {
 		t.Fatalf("stale snapshot completed: complete=%v err=%v", complete, err)
 	}
 	snapshot.VerifiedReports = reports
