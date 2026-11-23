@@ -36,7 +36,7 @@ func NewFileStore(dir string) (*FileStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if !info.IsDir() || info.Mode().Perm()&0022 != 0 {
 		return nil, ErrDurableStoreUnavailable
 	}
 	return &FileStore{dir: dir}, nil
