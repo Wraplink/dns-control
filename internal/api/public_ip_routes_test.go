@@ -59,7 +59,7 @@ func TestPublicIPReportRouteRequiresEveryDependency(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
-		name string
+		name    string
 		handler publicipsync.ReportHandler
 	}{
 		{name: "missing store", handler: publicipsync.ReportHandler{Authenticator: auth, Verifier: fakePublicIPVerifier{}}},
