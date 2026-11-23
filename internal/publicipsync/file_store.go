@@ -7,13 +7,15 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 
 	"github.com/google/uuid"
 )
 
-// FileStore persists each subscription as one atomic snapshot. Only one
-// FileStore process may own a directory; cross-process locking is not provided.
-// Callers must mount dir on persistent storage, not an ephemeral container layer.
+// FileStore persists each subscription as one atomic snapshot. Advisory
+// directory locking serializes cooperating local processes on Linux.
+// Callers must mount dir on persistent local storage; network filesystems and
+// non-cooperating writers are not supported.
 type FileStore struct {
 	mu  sync.Mutex
 	dir string
@@ -27,6 +29,25 @@ func NewFileStore(dir string) (*FileStore, error) {
 		return nil, err
 	}
 	return &FileStore{dir: dir}, nil
+}
+
+// lock acquires a process-shared advisory lock before reading or writing.
+// The lock file must never be deleted while the store is in use.
+func (s *FileStore) lock() (*os.File, error) {
+	file, err := os.OpenFile(filepath.Join(s.dir, ".store.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil {
+		file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
+func unlock(file *os.File) {
+	_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+	_ = file.Close()
 }
 
 func (s *FileStore) filename(id uuid.UUID) string {
@@ -109,6 +130,11 @@ func (s *FileStore) Begin(ctx context.Context, op Operation, requiredNodes []str
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	lock, err := s.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock(lock)
 	old, err := s.read(op.SubscriptionID)
 	if err == nil && op.Revision <= old.Operation.Revision {
 		return ErrInvalidOperation
@@ -128,6 +154,11 @@ func (s *FileStore) SaveVerified(ctx context.Context, node string, report NodeRe
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	lock, err := s.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock(lock)
 	snapshot, err := s.read(report.SubscriptionID)
 	if err != nil {
 		return err
@@ -168,6 +199,11 @@ func (s *FileStore) Snapshot(ctx context.Context, id uuid.UUID) (DurableSnapshot
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	lock, err := s.lock()
+	if err != nil {
+		return DurableSnapshot{}, err
+	}
+	defer unlock(lock)
 	return s.read(id)
 }
 
