@@ -83,7 +83,12 @@ func (s *FileStore) read(id uuid.UUID) (DurableSnapshot, error) {
 		}
 		seen[node] = true
 	}
+	reported := make(map[string]bool, len(snapshot.VerifiedReports))
 	for _, report := range snapshot.VerifiedReports {
+		if reported[report.NodeID] {
+			return DurableSnapshot{}, ErrInvalidOperation
+		}
+		reported[report.NodeID] = true
 		if !seen[report.NodeID] || !report.Applied || report.SubscriptionID != id || report.PublicIPID != snapshot.Operation.PublicIPID || report.Revision != snapshot.Operation.Revision || report.AttemptID != snapshot.Operation.AttemptID {
 			return DurableSnapshot{}, ErrInvalidOperation
 		}
