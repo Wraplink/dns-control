@@ -88,10 +88,10 @@ func TestPublicIPReportRoutePersistsAuthenticatedReport(t *testing.T) {
 	}
 	op := publicipsync.Operation{
 		SubscriptionID: uuid.New(),
-		PublicIPID: uuid.New(),
-		IPAddress: "8.8.8.8",
-		Revision: 1,
-		AttemptID: uuid.New(),
+		PublicIPID:     uuid.New(),
+		IPAddress:      "8.8.8.8",
+		Revision:       1,
+		AttemptID:      uuid.New(),
 	}
 	if err := store.Begin(ctx, op, []string{"edge-eu-01"}); err != nil {
 		t.Fatal(err)
@@ -109,12 +109,12 @@ func TestPublicIPReportRoutePersistsAuthenticatedReport(t *testing.T) {
 		Verifier:      acceptingPublicIPVerifier{},
 	})
 	report := publicipsync.NodeReport{
-		NodeID: "edge-eu-01",
+		NodeID:         "edge-eu-01",
 		SubscriptionID: op.SubscriptionID,
-		PublicIPID: op.PublicIPID,
-		Revision: op.Revision,
-		AttemptID: op.AttemptID,
-		Applied: true,
+		PublicIPID:     op.PublicIPID,
+		Revision:       op.Revision,
+		AttemptID:      op.AttemptID,
+		Applied:        true,
 	}
 	body, err := json.Marshal(report)
 	if err != nil {
