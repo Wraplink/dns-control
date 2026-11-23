@@ -11,9 +11,9 @@ import (
 // explicitly wires a trusted node authenticator and independent verifier.
 // This handler is not registered in the production DNS Control router yet.
 type ReportHandler struct {
-	Tracker *Tracker
+	Tracker       *Tracker
 	Authenticator *NodeAuthenticator
-	Verifier DataplaneVerifier
+	Verifier      DataplaneVerifier
 }
 
 func (h ReportHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
