@@ -21,6 +21,13 @@ func TestReportHandlerFailClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	store, err := NewFileStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Begin(context.Background(), op, nodes); err != nil {
+		t.Fatal(err)
+	}
 	verifier := verifyFunc(func(context.Context, string, Operation) (bool, error) { return true, nil })
 	body, err := json.Marshal(reports[0])
 	if err != nil {
@@ -34,12 +41,12 @@ func TestReportHandlerFailClosed(t *testing.T) {
 		want       int
 	}{
 		{"missing verifier", ReportHandler{Tracker: tracker, Authenticator: auth}, token, body, http.StatusServiceUnavailable},
-		{"missing credentials", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, "", body, http.StatusUnauthorized},
-		{"invalid JSON", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, []byte("{"), http.StatusBadRequest},
-		{"unknown field", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, append(body[:len(body)-1:len(body)-1], []byte(",\"unknown\":1}")...), http.StatusBadRequest},
-		{"oversized", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, []byte(strings.Repeat("x", 4097)), http.StatusBadRequest},
-		{"trailing JSON", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, append(append([]byte{}, body...), []byte(" {}")...), http.StatusBadRequest},
-		{"valid but not durable", ReportHandler{Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, body, http.StatusServiceUnavailable},
+		{"missing credentials", ReportHandler{Store: store, Tracker: tracker, Authenticator: auth, Verifier: verifier}, "", body, http.StatusUnauthorized},
+		{"invalid JSON", ReportHandler{Store: store, Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, []byte("{"), http.StatusBadRequest},
+		{"unknown field", ReportHandler{Store: store, Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, append(body[:len(body)-1:len(body)-1], []byte(",\"unknown\":1}")...), http.StatusBadRequest},
+		{"oversized", ReportHandler{Store: store, Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, []byte(strings.Repeat("x", 4097)), http.StatusBadRequest},
+		{"trailing JSON", ReportHandler{Store: store, Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, append(append([]byte{}, body...), []byte(" {}")...), http.StatusBadRequest},
+		{"valid durable", ReportHandler{Store: store, Tracker: tracker, Authenticator: auth, Verifier: verifier}, token, body, http.StatusAccepted},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(tc.body))
